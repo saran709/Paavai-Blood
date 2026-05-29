@@ -1,0 +1,6 @@
+{
+  "name": "Paavai BloodConnect",
+  "description": "An AI-powered blood donation and emergency donor management platform exclusively for Paavai students, faculty, alumni, and nearby hospitals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
