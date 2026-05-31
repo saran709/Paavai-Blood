@@ -1,7 +1,5 @@
 package com.example.ui.screens
 
-import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -40,6 +38,7 @@ import com.example.ui.theme.*
 import com.example.viewmodel.BloodConnectViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,8 +49,10 @@ fun RegistrationScreen(
     val context = LocalContext.current
     val profile by viewModel.registeredProfile.collectAsState()
     val history by viewModel.allHistory.collectAsState()
+    val dProfile = profile
+    val scope = rememberCoroutineScope()
 
-    var showRegisterForm by remember { mutableStateOf(profile == null) }
+    var showRegisterForm by remember { mutableStateOf(dProfile == null) }
     var showCertificateDialog by remember { mutableStateOf(false) }
     var isDownloadingPdf by remember { mutableStateOf(false) }
 
@@ -62,7 +63,7 @@ fun RegistrationScreen(
     var year by remember { mutableStateOf("3rd Year") }
     var bloodGroup by remember { mutableStateOf("O-") }
     var phone by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf(profile?.email ?: "student@paavai.edu.in") }
+    var email by remember { mutableStateOf(dProfile?.email ?: "student@paavai.edu.in") }
     var location by remember { mutableStateOf("Paavai Engineering Campus") }
     var weightText by remember { mutableStateOf("65") }
     var lastDonation by remember { mutableStateOf("") } // YYYY-MM-DD
@@ -70,7 +71,7 @@ fun RegistrationScreen(
     
     var errorText by remember { mutableStateOf("") }
 
-    val userHistories = history.filter { it.donorRegisterNumber == profile?.registerNumber }
+    val userHistories = history.filter { it.donorRegisterNumber == dProfile?.registerNumber }
 
     LazyColumn(
         modifier = Modifier
@@ -97,7 +98,7 @@ fun RegistrationScreen(
             }
         }
 
-        if (profile == null || showRegisterForm) {
+        if (dProfile == null || showRegisterForm) {
             // Profile registration Form
             item {
                 Card(
@@ -238,7 +239,7 @@ fun RegistrationScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (profile != null) {
+                            if (dProfile != null) {
                                 OutlinedButton(
                                     onClick = { showRegisterForm = false },
                                     modifier = Modifier.weight(1f),
@@ -289,7 +290,7 @@ fun RegistrationScreen(
                 }
             }
         } else {
-            val dProfile = profile!!
+            // Already smartcast to non-null because dProfile == null is false!
             
             // Highlight: Digitized QR Identification Card with beautiful college branding
             item {
@@ -696,13 +697,13 @@ fun RegistrationScreen(
                             
                             Button(
                                 onClick = {
-                                    isDownloadingPdf = true
-                                    // Simulate downloading pdf with a timed handler
-                                    Handler(Looper.getMainLooper()).postDelayed({
+                                    scope.launch {
+                                        isDownloadingPdf = true
+                                        kotlinx.coroutines.delay(2000)
                                         isDownloadingPdf = false
                                         Toast.makeText(context, "Certificate PDF downloaded to Downloads/Paavai_BloodConnect_${dProfile.registerNumber}.pdf", Toast.LENGTH_LONG).show()
                                         showCertificateDialog = false
-                                    }, 2000)
+                                    }
                                 },
                                 modifier = Modifier.testTag("download_pdf_btn"),
                                 colors = ButtonDefaults.buttonColors(containerColor = DeepMaroon),

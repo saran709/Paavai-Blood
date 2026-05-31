@@ -522,16 +522,17 @@ fun DashboardScreen(
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
 
+                        val currentProfile = profile
                         // Register button
                         Button(
                             onClick = {
-                                if (profile != null) {
+                                if (currentProfile != null) {
                                     viewModel.registerForCamp(
                                         camp.id,
                                         camp.title,
-                                        profile!!.registerNumber,
-                                        profile!!.name,
-                                        profile!!.bloodGroup
+                                        currentProfile.registerNumber,
+                                        currentProfile.name,
+                                        currentProfile.bloodGroup
                                     )
                                 } else {
                                     onNavigateToRegister()

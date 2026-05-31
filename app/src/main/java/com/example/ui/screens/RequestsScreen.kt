@@ -499,8 +499,7 @@ fun RequestsScreen(
     }
 
     // Fulfill Request matching selection dialog
-    if (selectedFulfillRequest != null) {
-        val req = selectedFulfillRequest!!
+    selectedFulfillRequest?.let { req ->
         var selectedDonorNumber by remember { mutableStateOf("22104085") } // Default Saran Ramesh
 
         Dialog(onDismissRequest = { selectedFulfillRequest = null }) {

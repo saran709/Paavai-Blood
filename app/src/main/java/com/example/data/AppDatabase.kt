@@ -34,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "bloodconnect_database"
                 )
                 .addCallback(AppDatabaseCallback(scope))
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

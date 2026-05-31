@@ -297,7 +297,7 @@ fun AdminScreen(viewModel: BloodConnectViewModel) {
                             Text(
                                 text = predictionReport ?: "",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextDark,
+                                color = Color(0xFF3B0764),
                                 lineHeight = 20.sp
                             )
                         }
