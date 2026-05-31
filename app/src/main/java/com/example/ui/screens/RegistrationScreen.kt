@@ -57,17 +57,22 @@ fun RegistrationScreen(
     var isDownloadingPdf by remember { mutableStateOf(false) }
 
     // Register parameters
-    var name by remember { mutableStateOf("") }
-    var regNo by remember { mutableStateOf("") }
-    var dept by remember { mutableStateOf("B.E. Computer Science") }
-    var year by remember { mutableStateOf("3rd Year") }
-    var bloodGroup by remember { mutableStateOf("O-") }
-    var phone by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(dProfile?.name ?: "") }
+    var regNo by remember { mutableStateOf(dProfile?.registerNumber ?: "") }
+    var dept by remember { mutableStateOf(dProfile?.department ?: "B.E. Computer Science") }
+    var year by remember { mutableStateOf(dProfile?.year ?: "3rd Year") }
+    var bloodGroup by remember { mutableStateOf(dProfile?.bloodGroup ?: "O-") }
+    var phone by remember { mutableStateOf(dProfile?.mobileNumber ?: "") }
     var email by remember { mutableStateOf(dProfile?.email ?: "student@paavai.edu.in") }
-    var location by remember { mutableStateOf("Paavai Engineering Campus") }
-    var weightText by remember { mutableStateOf("65") }
-    var lastDonation by remember { mutableStateOf("") } // YYYY-MM-DD
-    var userType by remember { mutableStateOf("Student") } // "Student", "Faculty", "Alumni"
+    var location by remember { mutableStateOf(dProfile?.location ?: "Paavai Engineering Campus") }
+    var weightText by remember { mutableStateOf(dProfile?.weight?.toString() ?: "55") }
+    var lastDonation by remember { mutableStateOf(dProfile?.lastDonationDate ?: "") } // YYYY-MM-DD
+    var userType by remember { mutableStateOf(dProfile?.userType ?: "Student") } // "Student", "Faculty", "Alumni"
+    var gender by remember { mutableStateOf(dProfile?.gender ?: "Male") }
+    var dob by remember { mutableStateOf(dProfile?.dob ?: "2005-01-01") }
+    var address by remember { mutableStateOf(dProfile?.address ?: "Namakkal, Tamil Nadu") }
+    var emergencyContact by remember { mutableStateOf(dProfile?.emergencyContact ?: "") }
+    var profilePhoto by remember { mutableStateOf(dProfile?.profilePhoto ?: "") }
     
     var errorText by remember { mutableStateOf("") }
 
@@ -183,8 +188,55 @@ fun RegistrationScreen(
                             OutlinedTextField(
                                 value = bloodGroup,
                                 onValueChange = { bloodGroup = it },
-                                label = { Text("Blood Group") },
+                                label = { Text("Blood Group (e.g., O-, A+)") },
                                 modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+
+                        // Row for Gender and DOB
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Gender Selector
+                            Column(modifier = Modifier.weight(1.0f)) {
+                                Text("Gender", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LightSlate)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(WarmSlate)
+                                        .padding(2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    listOf("Male", "Female").forEach { g ->
+                                        val active = g == gender
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (active) DeepMaroon else Color.Transparent)
+                                                .clickable { gender = g }
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = g,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (active) Color.White else TextDark
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // DOB Text Field
+                            OutlinedTextField(
+                                value = dob,
+                                onValueChange = { dob = it },
+                                label = { Text("DOB (YYYY-MM-DD)") },
+                                placeholder = { Text("YYYY-MM-DD") },
+                                modifier = Modifier.weight(1.0f).testTag("reg_dob_input"),
                                 singleLine = true
                             )
                         }
@@ -231,6 +283,71 @@ fun RegistrationScreen(
                             singleLine = true
                         )
 
+                        // Address and Emergency fields
+                        OutlinedTextField(
+                            value = address,
+                            onValueChange = { address = it },
+                            label = { Text("Full Residential Address") },
+                            modifier = Modifier.fillMaxWidth().testTag("reg_address_input"),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = emergencyContact,
+                            onValueChange = { emergencyContact = it },
+                            label = { Text("Emergency Contact (Name & Mobile)") },
+                            modifier = Modifier.fillMaxWidth().testTag("reg_emergency_contact_input"),
+                            singleLine = true
+                        )
+
+                        // Cool photo uploading simulation badge
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = WarmSlate.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, CardBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch {
+                                            profilePhoto = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?fit=crop&w=120&h=120"
+                                            Toast.makeText(context, "Profile Photo Upload Simulated!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudUpload,
+                                        contentDescription = "Upload",
+                                        tint = PaavaiGold,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text("Cloud Profile Photo Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                        Text(
+                                            text = if (profilePhoto.isNotEmpty()) "Simulated upload complete!" else "Upload your photo badge",
+                                            fontSize = 10.sp,
+                                            color = LightSlate
+                                        )
+                                    }
+                                }
+                                if (profilePhoto.isNotEmpty()) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Checked",
+                                        tint = SuccessGreen,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         if (errorText.isNotEmpty()) {
                             Text(text = errorText, color = BloodCrimson, fontSize = 11.sp)
                         }
@@ -251,31 +368,56 @@ fun RegistrationScreen(
                             Button(
                                 onClick = {
                                     val w = weightText.toDoubleOrNull() ?: 0.0
-                                    if (name.trim().isEmpty() || regNo.trim().isEmpty() || phone.trim().isEmpty()) {
-                                        errorText = "Please fill in Name, Register Number, and Phone."
+                                    if (name.trim().isEmpty() || regNo.trim().isEmpty() || phone.trim().isEmpty() || dob.trim().isEmpty() || address.trim().isEmpty() || emergencyContact.trim().isEmpty()) {
+                                        errorText = "Please fill in all fields (Name, Register No, DOB, Address, Emergency Contact)."
                                         return@Button
                                     }
                                     if (w < 35.0) {
-                                        errorText = "Please enter a valid weight."
+                                        errorText = "Please enter a valid weight density."
                                         return@Button
                                     }
+                                    
+                                    // Blood Group validation check
+                                    val validBGs = listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")
+                                    val normalizedBG = bloodGroup.trim().uppercase()
+                                    if (!validBGs.contains(normalizedBG)) {
+                                        errorText = "Invalid Blood Group. Must be one of: A+, A-, B+, B-, AB+, AB-, O+, O-."
+                                        return@Button
+                                    }
+
+                                    // DOB format check
+                                    val dobParts = dob.split("-")
+                                    if (dobParts.size != 3 || dob.length != 10) {
+                                        errorText = "Date of Birth format must be YYYY-MM-DD (e.g., 2005-04-12)."
+                                        return@Button
+                                    }
+
+                                    errorText = ""
                                     viewModel.registerDonor(
                                         name = name,
                                         regNo = regNo,
                                         dept = dept,
                                         year = year,
-                                        bloodGroup = bloodGroup,
+                                        bloodGroup = normalizedBG,
                                         mobile = phone,
                                         email = email,
                                         location = location,
                                         weight = w,
                                         lastDonation = lastDonation,
                                         userType = userType,
+                                        gender = gender,
+                                        dob = dob,
+                                        address = address,
+                                        emergencyContact = emergencyContact,
+                                        profilePhoto = profilePhoto,
                                         onSuccess = {
                                             showRegisterForm = false
+                                            Toast.makeText(context, "Donor Registration Successful!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onError = {
+                                            errorText = it
                                         }
                                     )
-                                    Toast.makeText(context, "Donor Registration Successful!", Toast.LENGTH_SHORT).show()
                                 },
                                 modifier = Modifier
                                     .weight(2f)
@@ -439,6 +581,266 @@ fun RegistrationScreen(
                 }
             }
 
+            // 1. AI Eligibility Status Panel
+            item {
+                val eligible = viewModel.checkIfEligible(dProfile.lastDonationDate, dProfile.weight, dProfile.gender, dProfile.dob)
+                val age = viewModel.calculateAge(dProfile.dob)
+                val daysLeft = viewModel.daysUntilEligible(dProfile.lastDonationDate, dProfile.gender)
+                val nextEligDate = viewModel.nextEligibleDate(dProfile.lastDonationDate, dProfile.gender)
+                val percentage = viewModel.calculateEligibilityPercentage(dProfile.lastDonationDate, dProfile.weight, dProfile.gender, dProfile.dob)
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("eligibility_checker_panel"),
+                    colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.HealthAndSafety,
+                                    contentDescription = "Health",
+                                    tint = if (eligible) SuccessGreen else BloodCrimson,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "AI Eligibility Status",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextDark
+                                )
+                            }
+                            
+                            Surface(
+                                color = if (eligible) SuccessGreen.copy(alpha = 0.15f) else BloodCrimson.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = if (eligible) "ELIGIBLE NOW" else "NOT ELIGIBLE",
+                                    color = if (eligible) SuccessGreen else BloodCrimson,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(14.dp))
+                        
+                        // Eligibility metrics checklist progress
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Age Check
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Age Requirement (≥18)", fontSize = 12.sp, color = LightSlate)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("$age Years Old", fontSize = 12.sp, color = TextDark, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = if (age >= 18) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                        contentDescription = "",
+                                        tint = if (age >= 18) SuccessGreen else BloodCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            
+                            // Weight Check
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Weight Requirement (≥50kg)", fontSize = 12.sp, color = LightSlate)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("${dProfile.weight} kg", fontSize = 12.sp, color = TextDark, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = if (dProfile.weight >= 50.0) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                        contentDescription = "",
+                                        tint = if (dProfile.weight >= 50.0) SuccessGreen else BloodCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            
+                            // Last Donation Gap
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val gapReq = if (dProfile.gender.lowercase() == "female") 120 else 90
+                                Text("Donation gap ($gapReq Days for ${dProfile.gender})", fontSize = 12.sp, color = LightSlate)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (daysLeft == 0) "Gap Met" else "$daysLeft Days Left",
+                                        fontSize = 12.sp,
+                                        color = if (daysLeft == 0) SuccessGreen else BloodCrimson,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = if (daysLeft == 0) Icons.Default.CheckCircle else Icons.Default.HourglassEmpty,
+                                        contentDescription = "",
+                                        tint = if (daysLeft == 0) SuccessGreen else BloodCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Next eligible date warning
+                        if (daysLeft > 0) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                color = BloodCrimson.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarToday,
+                                        contentDescription = "",
+                                        tint = BloodCrimson,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Next Eligible Donation Date: $nextEligDate",
+                                        fontSize = 10.sp,
+                                        color = BloodCrimson,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Divider(color = CardBorder)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Progress Gauge Percentage Text
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Clinical Eligibility Percentage", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LightSlate)
+                            Text("$percentage%", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = if (percentage == 100) SuccessGreen else PaavaiGold)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = percentage.toFloat() / 100f,
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = if (percentage == 100) SuccessGreen else PaavaiGold,
+                            trackColor = WarmSlate
+                        )
+                    }
+                }
+            }
+
+            // 2. Smart Donor Score & Milestone Panel
+            item {
+                val totalDonations = dProfile.totalDonations
+                val responseRate = 95 // Simulated base rate
+                val emergencyparticipation = if (totalDonations > 0) 1 else 0
+                val smartScore = (totalDonations * 35) + (responseRate * 0.4).toInt() + (emergencyparticipation * 25)
+                
+                val (rank, medalColor, medalIcon) = when {
+                    smartScore > 85 -> Triple("Platinum Donor", Color(0xFFE5E4E2), Icons.Default.WorkspacePremium)
+                    smartScore > 60 -> Triple("Gold Donor", PaavaiGold, Icons.Default.WorkspacePremium)
+                    smartScore > 30 -> Triple("Silver Donor", Color(0xFFC0C0C0), Icons.Default.WorkspacePremium)
+                    else -> Triple("Bronze Donor", Color(0xFFCD7F32), Icons.Default.Stars)
+                }
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("smart_donor_score_panel"),
+                    colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(medalColor.copy(alpha = 0.15f), CircleShape)
+                                .border(2.dp, medalColor, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = medalIcon,
+                                contentDescription = "Medal",
+                                tint = medalColor,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(16.dp))
+                        
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = rank,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TextDark
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = Color(0xFF7E22CE).copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "$smartScore XP",
+                                        color = Color(0xFFC084FC),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Based on $totalDonations donations • $responseRate% response rate • $emergencyparticipation emergency drives",
+                                fontSize = 10.sp,
+                                color = LightSlate,
+                                lineHeight = 14.sp
+                            )
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // Simple visual progress to next milestone
+                            val targetLeft = if (smartScore < 30) 30 - smartScore else if (smartScore < 60) 60 - smartScore else if (smartScore < 85) 85 - smartScore else 0
+                            val nextRank = if (smartScore < 30) "Silver" else if (smartScore < 60) "Gold" else if (smartScore < 85) "Platinum" else "Max Level"
+                            if (targetLeft > 0) {
+                                Text(
+                                    text = "Need $targetLeft XP more to qualify for $nextRank Status",
+                                    fontSize = 9.sp,
+                                    color = PaavaiGold,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Options: Edit profile, download certs
             item {
                 Row(
@@ -459,6 +861,11 @@ fun RegistrationScreen(
                             weightText = dProfile.weight.toString()
                             lastDonation = dProfile.lastDonationDate
                             userType = dProfile.userType
+                            gender = dProfile.gender
+                            dob = dProfile.dob
+                            address = dProfile.address
+                            emergencyContact = dProfile.emergencyContact
+                            profilePhoto = dProfile.profilePhoto
                             showRegisterForm = true
                         },
                         modifier = Modifier
@@ -484,6 +891,26 @@ fun RegistrationScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Generate Certificates")
                     }
+                }
+            }
+
+            // Secure session log out button
+            item {
+                Button(
+                    onClick = {
+                        viewModel.logout()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 8.dp)
+                        .testTag("profile_logout_btn"),
+                    colors = ButtonDefaults.buttonColors(containerColor = WarmSlate),
+                    border = BorderStroke(1.dp, BloodCrimson.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Logout, contentDescription = "Log Out Token", tint = BloodCrimson)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Secure Log Out", color = BloodCrimson, fontWeight = FontWeight.Bold)
                 }
             }
 

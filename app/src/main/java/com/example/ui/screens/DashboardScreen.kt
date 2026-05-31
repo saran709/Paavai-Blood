@@ -140,7 +140,7 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        val roles = listOf("Student Donor", "College Admin", "Hospital/Blood Bank")
+                        val roles = listOf("Student Donor", "Volunteer", "Admin")
                         roles.forEach { role ->
                             val isSelected = role == userRole
                             FilledTonalButton(
@@ -154,7 +154,7 @@ fun DashboardScreen(
                                 ),
                                 contentPadding = PaddingValues(2.dp)
                             ) {
-                                Text(role.replace("/Blood Bank", ""), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                Text(role, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -378,25 +378,31 @@ fun DashboardScreen(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
                                     text = request.patientName,
                                     fontWeight = FontWeight.Bold,
                                     color = TextDark,
-                                    fontSize = 15.sp
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 // Badge
                                 Surface(
                                     color = if (request.urgencyLevel == "Critical") BloodCrimson else PaavaiGold,
-                                    shape = RoundedCornerShape(6.dp)
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.wrapContentSize()
                                 ) {
                                     Text(
                                         text = request.urgencyLevel.uppercase(),
                                         color = if (request.urgencyLevel == "Critical") Color.White else TextDark,
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        maxLines = 1
                                     )
                                 }
                             }
@@ -412,10 +418,11 @@ fun DashboardScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = "Details",
-                            tint = LightSlate
+                        Text(
+                            text = ">",
+                            color = LightSlate,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
                         )
                     }
                 }

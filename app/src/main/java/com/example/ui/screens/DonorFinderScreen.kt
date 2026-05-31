@@ -28,10 +28,14 @@ import androidx.compose.ui.unit.sp
 import com.example.data.Donor
 import com.example.ui.theme.*
 import com.example.viewmodel.BloodConnectViewModel
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DonorFinderScreen(viewModel: BloodConnectViewModel) {
+    val context = LocalContext.current
     val donors by viewModel.allDonors.collectAsState()
     val isAiLoading by viewModel.isAiLoading.collectAsState()
     val matchingResultText by viewModel.matchingResultText.collectAsState()
@@ -51,7 +55,7 @@ fun DonorFinderScreen(viewModel: BloodConnectViewModel) {
         val groupMatches = donor.bloodGroup.uppercase() == searchBloodGroup.uppercase()
         val deptMatches = selectedDeptFilter == "All" || donor.department == selectedDeptFilter
         val yearMatches = selectedYearFilter == "All" || donor.year == selectedYearFilter
-        val availabilityMatches = !availabilityFilter || viewModel.checkIfEligible(donor.lastDonationDate, donor.weight)
+        val availabilityMatches = !availabilityFilter || viewModel.checkIfEligible(donor.lastDonationDate, donor.weight, donor.gender, donor.dob)
 
         groupMatches && deptMatches && yearMatches && availabilityMatches
     }
@@ -416,7 +420,7 @@ fun DonorFinderScreen(viewModel: BloodConnectViewModel) {
             }
         } else {
             items(filteredDonors) { donor ->
-                val eligible = viewModel.checkIfEligible(donor.lastDonationDate, donor.weight)
+                val eligible = viewModel.checkIfEligible(donor.lastDonationDate, donor.weight, donor.gender, donor.dob)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
@@ -574,7 +578,7 @@ fun DonorFinderScreen(viewModel: BloodConnectViewModel) {
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if(donor.weight < 45.0) "Weight is below clinical safety minimum (45kg)." else "Next eligible date: ${viewModel.nextEligibleDate(donor.lastDonationDate)} (${viewModel.daysUntilEligible(donor.lastDonationDate)} days remaining)",
+                                        text = if(donor.weight < 50.0) "Weight is below clinical safety minimum (50kg)." else "Next eligible date: ${viewModel.nextEligibleDate(donor.lastDonationDate, donor.gender)} (${viewModel.daysUntilEligible(donor.lastDonationDate, donor.gender)} days remaining)",
                                         color = BloodCrimson,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Medium
@@ -591,7 +595,16 @@ fun DonorFinderScreen(viewModel: BloodConnectViewModel) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Button(
-                                    onClick = { /* Simulated Call call */ },
+                                    onClick = {
+                                        try {
+                                            val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                                                data = Uri.parse("tel:${donor.mobileNumber}")
+                                            }
+                                            context.startActivity(dialIntent)
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    },
                                     colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),
@@ -602,7 +615,18 @@ fun DonorFinderScreen(viewModel: BloodConnectViewModel) {
                                     Text("Call ${donor.mobileNumber}", fontSize = 10.sp)
                                 }
                                 OutlinedButton(
-                                    onClick = { /* Simulated SMS SMS */ },
+                                    onClick = {
+                                        try {
+                                            val mailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                                data = Uri.parse("mailto:${donor.email}")
+                                                putExtra(Intent.EXTRA_SUBJECT, "Urgent Paavai BloodConnect Donation Request")
+                                                putExtra(Intent.EXTRA_TEXT, "Hello ${donor.name},\nWe are reaching out to you from the Paavai BloodConnect Campus Mobilization Network regarding a critical blood request. Please let us know if you could assist.")
+                                            }
+                                            context.startActivity(Intent.createChooser(mailIntent, "Send Email"))
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    },
                                     border = BorderStroke(1.dp, DeepMaroon),
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),

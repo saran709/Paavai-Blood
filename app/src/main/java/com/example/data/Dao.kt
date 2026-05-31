@@ -45,6 +45,12 @@ interface BloodConnectDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCamp(camp: DonationCamp)
 
+    @Update
+    suspend fun updateCamp(camp: DonationCamp)
+
+    @Delete
+    suspend fun deleteCamp(camp: DonationCamp)
+
     @Query("UPDATE donation_camps SET registeredCount = registeredCount + 1 WHERE id = :campId")
     suspend fun incrementCampRegistrationCount(campId: Int)
 

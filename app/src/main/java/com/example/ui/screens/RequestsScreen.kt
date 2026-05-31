@@ -27,6 +27,9 @@ import com.example.ui.theme.*
 import com.example.viewmodel.BloodConnectViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +37,7 @@ fun RequestsScreen(
     viewModel: BloodConnectViewModel,
     onNavigateToFinder: () -> Unit
 ) {
+    val context = LocalContext.current
     val requests by viewModel.allRequests.collectAsState()
     val donors by viewModel.allDonors.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
@@ -71,14 +75,16 @@ fun RequestsScreen(
                     )
                 }
                 
-                Button(
-                    onClick = { showRequestDialog = true },
-                    modifier = Modifier.testTag("create_request_btn"),
-                    colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
-                    Text("Request", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                if (userRole == "Volunteer" || userRole == "Admin") {
+                    Button(
+                        onClick = { showRequestDialog = true },
+                        modifier = Modifier.testTag("create_request_btn"),
+                        colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
+                        Text("Request", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
                 }
             }
         }
@@ -196,27 +202,33 @@ fun RequestsScreen(
                                 
                                 Spacer(modifier = Modifier.width(12.dp))
                                 
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
                                             text = request.patientName,
                                             fontWeight = FontWeight.Bold,
                                             color = TextDark,
-                                            fontSize = 15.sp
+                                            fontSize = 15.sp,
+                                            modifier = Modifier.weight(1f)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         
                                         // Urgency badge
                                         Surface(
                                             color = if (request.isFulfilled) SuccessGreen else if (request.urgencyLevel == "Critical") BloodCrimson else if (request.urgencyLevel == "High") PaavaiGold else InfoBlue,
-                                            shape = RoundedCornerShape(6.dp)
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.wrapContentSize()
                                         ) {
                                             Text(
                                                 text = if(request.isFulfilled) "FULFILLED" else request.urgencyLevel.uppercase(),
                                                 color = Color.White,
                                                 fontSize = 8.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                maxLines = 1
                                             )
                                         }
                                     }
@@ -249,11 +261,54 @@ fun RequestsScreen(
                                     fontSize = 10.sp,
                                     color = LightSlate
                                 )
-                                Text(
-                                    text = "Contact: ${request.contactName} (${request.contactNumber})",
-                                    fontSize = 11.sp,
-                                    color = TextDark
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "Contact: ${request.contactName} (${request.contactNumber})",
+                                        fontSize = 11.sp,
+                                        color = TextDark
+                                    )
+                                    // Live CALL trigger
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = "Dial Phone Number",
+                                        tint = SuccessGreen,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                try {
+                                                    val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                                                        data = Uri.parse("tel:${request.contactNumber}")
+                                                    }
+                                                    context.startActivity(dialIntent)
+                                                } catch (e: Exception) {
+                                                    // ignore
+                                                }
+                                            }
+                                    )
+                                    // Live EMAIL trigger
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = "Send Email Inquiry",
+                                        tint = InfoBlue,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                try {
+                                                    val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                                        data = Uri.parse("mailto:bloodconnect@paavai.edu.in")
+                                                        putExtra(Intent.EXTRA_SUBJECT, "Blood Donation Request Concern")
+                                                        putExtra(Intent.EXTRA_TEXT, "Hello ${request.contactName},\nRegarding the entry for ${request.bloodGroup} at ${request.hospitalName}, we can support blood mobilization.")
+                                                    }
+                                                    context.startActivity(Intent.createChooser(emailIntent, "Send Email"))
+                                                } catch (e: Exception) {
+                                                    // ignore
+                                                }
+                                            }
+                                    )
+                                }
                             }
 
                             // Matching actions

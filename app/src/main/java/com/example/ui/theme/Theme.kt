@@ -11,28 +11,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme =
-  darkColorScheme(
+private val LightColorScheme =
+  lightColorScheme(
     primary = DeepMaroon,
     secondary = BloodCrimson,
     tertiary = PaavaiGold,
-    background = WarmSlate, // Pitch black: 0xFF050505
-    surface = DarkCharcoal,   // Slate surface: 0xFF121214
+    background = WarmSlate, // Pure White
+    surface = DarkCharcoal,   // Light surface
     onPrimary = Color.White,
     onSecondary = Color.White,
-    onBackground = TextDark,  // White-slate: 0xFFF8FAFC
+    onBackground = TextDark,  // Deep Coal Text
     onSurface = TextDark
   )
 
-private val LightColorScheme = DarkColorScheme // Enforce dark theme even for light mode for complete "Sophisticated Dark" aesthetic
-
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = true, // Force Dark mode as requested
+  darkTheme: Boolean = false, // Default to clean Light Theme as requested
   dynamicColor: Boolean = false, // Disable dynamic colors to preserve our branding
   content: @Composable () -> Unit,
 ) {
-  val colorScheme = DarkColorScheme
+  val colorScheme = LightColorScheme
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

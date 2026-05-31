@@ -2,20 +2,21 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Paavai BloodConnect Sophisticated Dark Palette
-val BloodCrimson = Color(0xFFEF4444) // Neon crimson/red
-val DeepMaroon = Color(0xFFDC2626)   // Rich crimson red
-val PaavaiGold = Color(0xFFFBBF24)   // Amber gold
-val LightGold = Color(0xFFFDE047)    // Sunny gold yellow
-val WarmCoral = Color(0xFFF87171)    // Warm rose/coral
+// Paavai BloodConnect Sophisticated White & Red Palette
+val BloodCrimson = Color(0xFFEF4444) // Vibrant Crimson Red
+val DeepMaroon = Color(0xFFDC2626)   // Rich deep Red
+val PaavaiGold = Color(0xFFB45309)   // Dark Gold / Amber contrast for light mode
+val LightGold = Color(0xFFF59E0B)    // Clean warm gold
+val WarmCoral = Color(0xFFEF4444)    // Accent red
 
-val RedLightBG = Color(0xFF1F1112)   // Dark burgundy background for emergency UI
-val TextDark = Color(0xFFF8FAFC)     // Elegant white-slate for high readability in dark theme
-val WarmSlate = Color(0xFF050505)    // Deep, pure pitch black background
-val CardBorder = Color(0xFF1E293B)   // Slate charcoal boundaries
-val SuccessGreen = Color(0xFF10B981) // Emerald accent
-val InfoBlue = Color(0xFF3B82F6)     // Vibrant Blue
-val DarkCharcoal = Color(0xFF121214) // Deep charcoal surface color
-val LightSlate = Color(0xFF94A3B8)   // Slate gray for secondary typography
+val RedLightBG = Color(0xFFFEE2E2)   // Soft red/pink light background for alerts
+val TextDark = Color(0xFF111827)     // Deep coal black for high readability on white backgrounds
+val WarmSlate = Color(0xFFFFFFFF)    // Clean, pure white background
+val CardBorder = Color(0xFFE5E7EB)   // Light grey boundaries for cards
+val SuccessGreen = Color(0xFF10B981) // Emerald accent green
+val InfoBlue = Color(0xFF2563EB)     // Trustworthy blue
+val DarkCharcoal = Color(0xFFF9FAFB) // Soft off-white surface color
+val LightSlate = Color(0xFF4B5563)   // Medium slate gray for secondary typography
+
 
 

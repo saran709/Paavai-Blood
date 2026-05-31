@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
         DonationCamp::class,
         DonationHistory::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

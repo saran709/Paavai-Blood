@@ -19,7 +19,12 @@ data class Donor(
     val lastDonationDate: String, // "YYYY-MM-DD" or empty
     val userType: String = "Student", // "Student", "Faculty", "Alumni", "Local Volunteer"
     val availability: Boolean = true,
-    val totalDonations: Int = 0
+    val totalDonations: Int = 0,
+    val gender: String = "Male",
+    val dob: String = "2005-01-01",
+    val address: String = "Namakkal, Tamil Nadu",
+    val emergencyContact: String = "+91 9900998877",
+    val profilePhoto: String = ""
 ) : Serializable
 
 @Entity(tableName = "blood_requests")

@@ -17,10 +17,118 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
     private val dao = AppDatabase.getDatabase(application, viewModelScope).bloodConnectDao()
 
     // Active User Context for Simulation
-    // Supports: "Student Donor", "Requester", "Hospital/Blood Bank", "College Admin"
+    // Supports: "Student Donor", "Volunteer", "Admin"
     val userRole = MutableStateFlow("Student Donor")
     val activeUserRegNumber = MutableStateFlow("22104085") // Saran Ramesh's register number default
     val registeredProfile = MutableStateFlow<Donor?>(null)
+
+    // Authentication & User Session Core States
+    val isLoggedIn = MutableStateFlow(false)
+    val currentUserEmail = MutableStateFlow("")
+    val currentUserName = MutableStateFlow("Saran Ramesh")
+
+    // Local Users account credential records
+    data class UserAccount(
+        val name: String,
+        val email: String,
+        val regNo: String,
+        val role: String, // "Admin", "Volunteer", "Student Donor"
+        val dept: String = "B.E. Computer Science",
+        val year: String = "3rd Year",
+        val bloodGroup: String = "O-",
+        val phone: String = "9876543210"
+    )
+
+    val accounts = MutableStateFlow<Map<String, Pair<String, UserAccount>>>(
+        mapOf(
+            "blood@paavai.com" to Pair("blood@123", UserAccount("Administrator", "blood@paavai.com", "ADM001", "Admin")),
+            "volunteer@paavai.edu.in" to Pair("vol123", UserAccount("Paavai Volunteer", "volunteer@paavai.edu.in", "VOL100", "Volunteer")),
+            "student@paavai.edu.in" to Pair("stud123", UserAccount("Saran Ramesh", "student@paavai.edu.in", "22104085", "Student Donor"))
+        )
+    )
+
+    fun login(email: String, word: String): Boolean {
+        val entry = accounts.value[email.trim().lowercase()]
+        if (entry != null && entry.first == word) {
+            val account = entry.second
+            activeUserRegNumber.value = account.regNo
+            userRole.value = account.role
+            currentUserEmail.value = account.email
+            currentUserName.value = account.name
+            isLoggedIn.value = true
+            syncProfile()
+            return true
+        }
+        return false
+    }
+
+    fun signup(
+        name: String,
+        email: String,
+        pass: String,
+        regNo: String,
+        dept: String,
+        year: String,
+        bloodGroup: String,
+        phone: String,
+        role: String
+    ): Boolean {
+        val trimEmail = email.trim().lowercase()
+        if (accounts.value.containsKey(trimEmail)) {
+            return false // Account already exists
+        }
+
+        val account = UserAccount(
+            name = name,
+            email = trimEmail,
+            regNo = regNo,
+            role = role,
+            dept = dept,
+            year = year,
+            bloodGroup = bloodGroup,
+            phone = phone
+        )
+
+        val newMap = accounts.value.toMutableMap()
+        newMap[trimEmail] = Pair(pass, account)
+        accounts.value = newMap
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = dao.getDonorByRegisterNumber(regNo)
+            if (existing == null) {
+                val newDonor = Donor(
+                    name = name,
+                    registerNumber = regNo,
+                    department = dept,
+                    year = year,
+                    bloodGroup = bloodGroup,
+                    mobileNumber = phone,
+                    email = trimEmail,
+                    location = "Paavai Engineering Campus",
+                    weight = 65.0,
+                    lastDonationDate = "",
+                    userType = if (role == "Volunteer") "Local Volunteer" else "Student",
+                    availability = true,
+                    totalDonations = 0
+                )
+                dao.insertDonor(newDonor)
+            }
+        }
+
+        activeUserRegNumber.value = regNo
+        userRole.value = role
+        currentUserEmail.value = trimEmail
+        currentUserName.value = name
+        isLoggedIn.value = true
+        syncProfile()
+        return true
+    }
+
+    fun logout() {
+        isLoggedIn.value = false
+        currentUserEmail.value = ""
+        currentUserName.value = ""
+    }
 
     // Flow State variables
     val allDonors: StateFlow<List<Donor>> = dao.getAllDonors()
@@ -74,10 +182,27 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         weight: Double,
         lastDonation: String,
         userType: String,
-        onSuccess: () -> Unit
+        gender: String = "Male",
+        dob: String = "2005-01-01",
+        address: String = "Namakkal, Tamil Nadu",
+        emergencyContact: String = "+91 9900998877",
+        profilePhoto: String = "",
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit = {}
     ) {
         viewModelScope.launch(Dispatchers.IO) {
+            val existing = dao.getDonorByRegisterNumber(regNo)
+            val currentId = registeredProfile.value?.id ?: 0
+            if (existing != null && existing.id != currentId) {
+                withContext(Dispatchers.Main) {
+                    onError("Register number '$regNo' is already registered in the database.")
+                }
+                return@launch
+            }
+
+            val isElig = checkIfEligible(lastDonation, weight, gender, dob)
             val newDonor = Donor(
+                id = currentId,
                 name = name,
                 registerNumber = regNo,
                 department = dept,
@@ -89,8 +214,13 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
                 weight = weight,
                 lastDonationDate = lastDonation,
                 userType = userType,
-                availability = checkIfEligible(lastDonation, weight),
-                totalDonations = if (lastDonation.isNotEmpty()) 1 else 0
+                availability = isElig,
+                totalDonations = if (lastDonation.isNotEmpty()) 1 else 0,
+                gender = gender,
+                dob = dob,
+                address = address,
+                emergencyContact = emergencyContact,
+                profilePhoto = profilePhoto
             )
             dao.insertDonor(newDonor)
             activeUserRegNumber.value = regNo
@@ -108,7 +238,9 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
                 )
                 dao.insertHistory(record)
             }
-            onSuccess()
+            withContext(Dispatchers.Main) {
+                onSuccess()
+            }
         }
     }
 
@@ -223,8 +355,15 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
     }
 
     // Check Eligibility based on date & weight
-    fun checkIfEligible(lastDonation: String, weight: Double): Boolean {
-        if (weight < 45.0) return false
+    fun checkIfEligible(
+        lastDonation: String,
+        weight: Double,
+        gender: String = "Male",
+        dob: String = "2005-01-01"
+    ): Boolean {
+        val age = calculateAge(dob)
+        if (age < 18) return false
+        if (weight < 50.0) return false
         if (lastDonation.isEmpty()) return true
         
         return try {
@@ -232,38 +371,101 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
             val donationDate = sdf.parse(lastDonation) ?: return true
             val diffInMs = Date().time - donationDate.time
             val diffInDays = diffInMs / (1000 * 60 * 60 * 24)
-            diffInDays >= 90 // 90 days required between donations
+            val gapRequired = if (gender.trim().lowercase() == "female") 120 else 90
+            diffInDays >= gapRequired
         } catch (e: Exception) {
             true
         }
     }
 
     // Helper: Days until next eligible date
-    fun daysUntilEligible(lastDonation: String): Int {
+    fun daysUntilEligible(lastDonation: String, gender: String = "Male"): Int {
         if (lastDonation.isEmpty()) return 0
         return try {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val donationDate = sdf.parse(lastDonation) ?: return 0
             val diffInMs = Date().time - donationDate.time
             val diffInDays = (diffInMs / (1000 * 60 * 60 * 24)).toInt()
-            if (diffInDays >= 90) 0 else 90 - diffInDays
+            val gapRequired = if (gender.trim().lowercase() == "female") 120 else 90
+            if (diffInDays >= gapRequired) 0 else gapRequired - diffInDays
         } catch (e: Exception) {
             0
         }
     }
 
-    fun nextEligibleDate(lastDonation: String): String {
+    fun nextEligibleDate(lastDonation: String, gender: String = "Male"): String {
         if (lastDonation.isEmpty()) return "Eligible Now"
         return try {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val donationDate = sdf.parse(lastDonation) ?: return "Eligible Now"
             val calendar = Calendar.getInstance()
             calendar.time = donationDate
-            calendar.add(Calendar.DAY_OF_YEAR, 90)
+            val gapRequired = if (gender.trim().lowercase() == "female") 120 else 90
+            calendar.add(Calendar.DAY_OF_YEAR, gapRequired)
             sdf.format(calendar.time)
         } catch (e: Exception) {
             "Eligible Now"
         }
+    }
+
+    fun calculateAge(dobStr: String): Int {
+        if (dobStr.isEmpty()) return 18
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val birthDate = sdf.parse(dobStr) ?: return 18
+            val today = Calendar.getInstance()
+            val birth = Calendar.getInstance()
+            birth.time = birthDate
+            var age = today.get(Calendar.YEAR) - birth.get(Calendar.YEAR)
+            if (today.get(Calendar.DAY_OF_YEAR) < birth.get(Calendar.DAY_OF_YEAR)) {
+                age--
+            }
+            age
+        } catch (e: Exception) {
+            18
+        }
+    }
+
+    fun calculateEligibilityPercentage(
+        lastDonation: String,
+        weight: Double,
+        gender: String = "Male",
+        dob: String = "2005-01-01"
+    ): Int {
+        val age = calculateAge(dob)
+        
+        // 1. Age Factor
+        val ageFactor = if (age >= 18) 100.0 else (age.toDouble() / 18.0) * 100.0
+        
+        // 2. Weight Factor
+        val weightFactor = if (weight >= 50.0) 100.0 else (weight / 50.0) * 100.0
+        
+        // 3. Time status factor
+        val timeFactor = if (lastDonation.isEmpty()) {
+            100.0
+        } else {
+            try {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val donationDate = sdf.parse(lastDonation)
+                if (donationDate != null) {
+                    val diffInMs = Date().time - donationDate.time
+                    val diffInDays = diffInMs / (1000 * 60 * 60 * 24)
+                    val gapRequired = if (gender.trim().lowercase() == "female") 120 else 90
+                    if (diffInDays >= gapRequired) {
+                        100.0
+                    } else {
+                        (diffInDays.toDouble() / gapRequired.toDouble()) * 100.0
+                    }
+                } else {
+                    100.0
+                }
+            } catch (e: Exception) {
+                100.0
+            }
+        }
+        
+        val percentage = minOf(ageFactor, weightFactor, timeFactor).toInt()
+        return maxOf(0, minOf(100, percentage))
     }
 
     // Simulated alerts generator
@@ -285,7 +487,7 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
             // Match group and eligibility
             compatibleGroups.contains(donor.bloodGroup)
         }.sortedWith(
-            compareBy<Donor> { !checkIfEligible(it.lastDonationDate, it.weight) } // Eligible first
+            compareBy<Donor> { !checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) } // Eligible first
                 .thenBy { it.location != "Paavai Engineering Campus" } // Paavai Campus nearest
                 .thenByDescending { it.totalDonations } // Most active first
         )
@@ -350,7 +552,7 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
 
     // Backup Local Matching Summary Generative Generator (Aesthetics of AI slop avoided)
     private fun generateMockAiMatching(request: BloodRequest, candidates: List<Donor>): String {
-        val eligible = candidates.filter { checkIfEligible(it.lastDonationDate, it.weight) }
+        val eligible = candidates.filter { checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) }
         val sb = StringBuilder()
         sb.append("### 🧠 AI Smart Match Rank & Safety Assessment (Local Engine)\n\n")
         sb.append("Analysis ran for **${request.bloodGroup}** blood group for patient **${request.patientName}** at **${request.hospitalName}**.\n\n")
@@ -364,9 +566,13 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         eligible.take(3).forEachIndexed { index, donor ->
             val position = index + 1
             val daysAgo = if (donor.lastDonationDate.isNotEmpty()) {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val dates = sdf.parse(donor.lastDonationDate)
-                if (dates != null) ((Date().time - dates.time) / (1000*60*60*24)).toInt() else 120
+                try {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    val dates = sdf.parse(donor.lastDonationDate)
+                    if (dates != null) ((Date().time - dates.time) / (1000*60*60*24)).toInt() else 120
+                } catch (e: Exception) {
+                    120
+                }
             } else 180
             
             sb.append("$position. **${donor.name}** (${donor.bloodGroup}) — **Rank Score: ${98 - index * 5}%**\n")
@@ -376,13 +582,13 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         }
 
         sb.append("⚙️ **Rule-Based Eligibility Breakdown:**\n")
-        candidates.filter { !checkIfEligible(it.lastDonationDate, it.weight) }.forEach { donor ->
+        candidates.filter { !checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) }.forEach { donor ->
             sb.append("   - ❌ **${donor.name}** (${donor.bloodGroup}): Ineligible. ")
-            if (donor.weight < 45.0) {
-                sb.append("Weight is ${donor.weight}kg (Under minimum 45kg threshold).\n")
+            if (donor.weight < 50.0) {
+                sb.append("Weight is ${donor.weight}kg (Under clinical safety minimum 50kg threshold).\n")
             } else {
-                val daysLeft = daysUntilEligible(donor.lastDonationDate)
-                sb.append("Last donated on ${donor.lastDonationDate} ($daysLeft days remain until next eligibility on ${nextEligibleDate(donor.lastDonationDate)}).\n")
+                val daysLeft = daysUntilEligible(donor.lastDonationDate, donor.gender)
+                sb.append("Last donated on ${donor.lastDonationDate} ($daysLeft days remain until next eligibility on ${nextEligibleDate(donor.lastDonationDate, donor.gender)}).\n")
             }
         }
         
@@ -458,5 +664,62 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
             2. 🤝 **Alumni Mobilization:** Contact MCA and MBA alumni chapters located within 15km of Namakkal town to register as backups for semester hiatus.
             3. 🏥 **Hospital Sync:** Proactively secure 10 units of rare reserves before college holidays begin.
         """.trimIndent()
+    }
+
+    fun deleteDonor(donor: Donor) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteDonor(donor)
+            syncProfile()
+        }
+    }
+
+    fun updateDonorDetails(donor: Donor) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateDonor(donor)
+            syncProfile()
+        }
+    }
+
+    fun insertDonorAdmin(donor: Donor) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertDonor(donor)
+            syncProfile()
+        }
+    }
+
+    fun insertCampAdmin(camp: DonationCamp) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertCamp(camp)
+        }
+    }
+
+    fun updateCampAdmin(camp: DonationCamp) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateCamp(camp)
+        }
+    }
+
+    fun deleteCampAdmin(camp: DonationCamp) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteCamp(camp)
+        }
+    }
+
+    fun deleteRequestAdmin(requestId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteRequestById(requestId)
+        }
+    }
+
+    fun insertRequestAdmin(request: BloodRequest) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertRequest(request)
+        }
+    }
+
+    fun updateRequestAdmin(request: BloodRequest) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertRequest(request)
+        }
     }
 }

@@ -22,7 +22,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.WarmSlate
+import com.example.ui.theme.BloodCrimson
 import com.example.viewmodel.BloodConnectViewModel
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,60 +44,106 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
+                val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+                val userRole by viewModel.userRole.collectAsState()
+
+                // Security Session Router: Instantly throw back to login if logged out
+                LaunchedEffect(isLoggedIn, currentRoute) {
+                    if (currentRoute != null && !isLoggedIn && currentRoute != "splash" && currentRoute != "login") {
+                        navController.navigate("login") {
+                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                        }
+                    }
+                }
+
+                val showBottomBar = currentRoute != "splash" && currentRoute != "login"
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        NavigationBar(
-                            modifier = Modifier.testTag("app_navigation_bar"),
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 8.dp
-                        ) {
-                            val navItems = listOf(
-                                NavigationBarItemData("home", "Home", Icons.Default.Dashboard, "Home Navigation"),
-                                NavigationBarItemData("finder", "Find Donors", Icons.Default.Search, "Finder Navigation"),
-                                NavigationBarItemData("requests", "Requests", Icons.Default.Bloodtype, "Requests Navigation"),
-                                NavigationBarItemData("register", "QR Card", Icons.Default.QrCode, "Register Navigation"),
-                                NavigationBarItemData("rewards", "Rewards", Icons.Default.EmojiEvents, "Rewards Navigation"),
-                                NavigationBarItemData("admin", "Admin Panel", Icons.Default.AdminPanelSettings, "Admin Navigation")
-                            )
-
-                            navItems.forEach { item ->
-                                val isSelected = currentRoute == item.route
-                                NavigationBarItem(
-                                    selected = isSelected,
-                                    onClick = {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = {
-                                        Icon(
-                                            imageVector = item.icon,
-                                            contentDescription = item.contentDescription
-                                        )
-                                    },
-                                    label = { Text(item.label, fontSize = 10.sp) },
-                                    modifier = Modifier.testTag("nav_tab_${item.route}")
+                        if (showBottomBar) {
+                            NavigationBar(
+                                modifier = Modifier.testTag("app_navigation_bar"),
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 8.dp
+                            ) {
+                                // Raw navigation options
+                                val navItems = mutableListOf(
+                                    NavigationBarItemData("home", "Home", Icons.Default.Dashboard, "Home Navigation"),
+                                    NavigationBarItemData("finder", "Find Donors", Icons.Default.Search, "Finder Navigation"),
+                                    NavigationBarItemData("requests", "Requests", Icons.Default.Bloodtype, "Requests Navigation"),
+                                    NavigationBarItemData("profile", "Profile", Icons.Default.AccountCircle, "Profile Navigation"),
+                                    NavigationBarItemData("rewards", "Rewards", Icons.Default.EmojiEvents, "Rewards Navigation")
                                 )
+
+                                // Conditional Admin Panel constraint: ONLY show if user has "Admin" role
+                                if (userRole == "Admin") {
+                                    navItems.add(
+                                        NavigationBarItemData("admin", "Admin Panel", Icons.Default.AdminPanelSettings, "Admin Navigation")
+                                    )
+                                }
+
+                                navItems.forEach { item ->
+                                    val isSelected = currentRoute == item.route
+                                    NavigationBarItem(
+                                        selected = isSelected,
+                                        onClick = {
+                                            navController.navigate(item.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        },
+                                        icon = {
+                                            Icon(
+                                                imageVector = item.icon,
+                                                contentDescription = item.contentDescription
+                                            )
+                                        },
+                                        label = { Text(item.label, fontSize = 10.sp) },
+                                        modifier = Modifier.testTag("nav_tab_${item.route}")
+                                    )
+                                }
                             }
                         }
                     }
                 ) { innerPadding ->
                     NavHost(
                         navController = navController,
-                        startDestination = "home",
+                        startDestination = "splash", // Boot into beautiful animated Splash
                         modifier = Modifier.padding(innerPadding)
                     ) {
+                        composable("splash") {
+                            SplashScreen(onNavigateToNext = {
+                                if (isLoggedIn) {
+                                    navController.navigate("home") {
+                                        popUpTo("splash") { inclusive = true }
+                                    }
+                                } else {
+                                    navController.navigate("login") {
+                                        popUpTo("splash") { inclusive = true }
+                                    }
+                                }
+                            })
+                        }
+                        composable("login") {
+                            LoginScreen(
+                                viewModel = viewModel,
+                                onLoginSuccess = {
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
                         composable("home") {
                             DashboardScreen(
                                 viewModel = viewModel,
                                 onNavigateToFinder = { navController.navigate("finder") },
                                 onNavigateToRequests = { navController.navigate("requests") },
-                                onNavigateToRegister = { navController.navigate("register") }
+                                onNavigateToRegister = { navController.navigate("profile") }
                             )
                         }
                         composable("finder") {
@@ -103,7 +155,7 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToFinder = { navController.navigate("finder") }
                             )
                         }
-                        composable("register") {
+                        composable("profile") {
                             RegistrationScreen(
                                 viewModel = viewModel,
                                 onNavigateToDashboard = { navController.navigate("home") }
@@ -112,11 +164,21 @@ class MainActivity : ComponentActivity() {
                         composable("rewards") {
                             RewardsScreen(
                                 viewModel = viewModel,
-                                onNavigateToRegister = { navController.navigate("register") }
+                                onNavigateToRegister = { navController.navigate("profile") }
                             )
                         }
                         composable("admin") {
-                            AdminScreen(viewModel = viewModel)
+                            // Defensive protection: if non-admin tries to navigate directly
+                            if (userRole == "Admin") {
+                                AdminScreen(viewModel = viewModel)
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize().background(WarmSlate),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Unauthorized Access", color = BloodCrimson, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
