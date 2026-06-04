@@ -18,33 +18,33 @@ import com.example.BuildConfig
 // Moshi data classes for Gemini REST API
 @JsonClass(generateAdapter = true)
 data class GeminiRequest(
-    @Json(name = "contents") val contents: List<ContentBlock>,
-    @Json(name = "generationConfig") val generationConfig: GenerationConfigBlock? = null
+    @field:Json(name = "contents") val contents: List<ContentBlock>,
+    @field:Json(name = "generationConfig") val generationConfig: GenerationConfigBlock? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class ContentBlock(
-    @Json(name = "parts") val parts: List<PartBlock>
+    @field:Json(name = "parts") val parts: List<PartBlock>
 )
 
 @JsonClass(generateAdapter = true)
 data class PartBlock(
-    @Json(name = "text") val text: String
+    @field:Json(name = "text") val text: String
 )
 
 @JsonClass(generateAdapter = true)
 data class GenerationConfigBlock(
-    @Json(name = "temperature") val temperature: Float = 0.2f
+    @field:Json(name = "temperature") val temperature: Float = 0.2f
 )
 
 @JsonClass(generateAdapter = true)
 data class GeminiResponse(
-    @Json(name = "candidates") val candidates: List<CandidateBlock>?
+    @field:Json(name = "candidates") val candidates: List<CandidateBlock>?
 )
 
 @JsonClass(generateAdapter = true)
 data class CandidateBlock(
-    @Json(name = "content") val content: ContentBlock?
+    @field:Json(name = "content") val content: ContentBlock?
 )
 
 interface GeminiApiService {

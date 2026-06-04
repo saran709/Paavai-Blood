@@ -63,3 +63,30 @@ data class DonationHistory(
     val unitsDonated: Int = 1,
     val hospitalName: String = "Paavai Blood Camp"
 ) : Serializable
+
+@Entity(tableName = "user_accounts")
+data class UserAccountEntity(
+    @PrimaryKey val email: String,
+    val password: String,
+    val name: String,
+    val registerNumber: String,
+    val role: String, // "Admin", "Volunteer", "Student Donor"
+    val department: String = "B.E. Computer Science",
+    val year: String = "3rd Year",
+    val bloodGroup: String = "O-",
+    val phone: String = "9876543210"
+) : Serializable
+
+@Entity(tableName = "donor_notifications")
+data class DonorNotification(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val donorRegisterNumber: String, // Destination registered donor number
+    val requestId: Int, // The broadcast request ID
+    val bloodGroup: String, // Requested blood group
+    val hospitalName: String,
+    val patientName: String,
+    val urgencyLevel: String,
+    val content: String, // Notification message text
+    var isRead: Boolean = false,
+    val timestamp: Long = System.currentTimeMillis()
+) : Serializable

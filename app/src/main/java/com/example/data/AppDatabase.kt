@@ -14,9 +14,11 @@ import kotlinx.coroutines.launch
         Donor::class,
         BloodRequest::class,
         DonationCamp::class,
-        DonationHistory::class
+        DonationHistory::class,
+        UserAccountEntity::class,
+        DonorNotification::class
     ],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -260,6 +262,33 @@ abstract class AppDatabase : RoomDatabase() {
             )
 
             initialHistory.forEach { dao.insertHistory(it) }
+
+            // Prepopulate some default user accounts (matching the credentials from ViewModel)
+            val defaultAccounts = listOf(
+                UserAccountEntity(
+                    email = "blood@paavai.com",
+                    password = "blood@123",
+                    name = "Administrator",
+                    registerNumber = "ADM001",
+                    role = "Admin"
+                ),
+                UserAccountEntity(
+                    email = "volunteer@paavai.edu.in",
+                    password = "vol123",
+                    name = "Paavai Volunteer",
+                    registerNumber = "VOL100",
+                    role = "Volunteer"
+                ),
+                UserAccountEntity(
+                    email = "student@paavai.edu.in",
+                    password = "stud123",
+                    name = "Saran Ramesh",
+                    registerNumber = "22104085",
+                    role = "Student Donor"
+                )
+            )
+
+            defaultAccounts.forEach { dao.insertUserAccount(it) }
         }
     }
 }

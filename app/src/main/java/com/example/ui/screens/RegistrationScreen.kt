@@ -76,6 +76,43 @@ fun RegistrationScreen(
     
     var errorText by remember { mutableStateOf("") }
 
+    val isCheckingAiEligibility by viewModel.isCheckingAiEligibility.collectAsState()
+    val aiEligibilityResult by viewModel.aiEligibilityResult.collectAsState()
+
+    val symptomOptions = listOf(
+        "Recent tattoo or piercing (past 6 months)",
+        "Undergoing antibiotic treatment",
+        "Recent cold, fever, or flu (past 1 week)",
+        "Low hemoglobin or history of anemia",
+        "Severe sleep deprivation (past 24h)",
+        "Active dental surgery or extraction"
+    )
+    val checkedSymptoms = remember { mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(Unit) {
+        symptomOptions.forEach { if (!checkedSymptoms.containsKey(it)) checkedSymptoms[it] = false }
+    }
+
+    LaunchedEffect(dProfile) {
+        dProfile?.let {
+            name = it.name
+            regNo = it.registerNumber
+            dept = it.department
+            year = it.year
+            bloodGroup = it.bloodGroup
+            phone = it.mobileNumber
+            email = it.email
+            location = it.location
+            weightText = it.weight.toString()
+            lastDonation = it.lastDonationDate
+            userType = it.userType
+            gender = it.gender
+            dob = it.dob
+            address = it.address
+            emergencyContact = it.emergencyContact
+            profilePhoto = it.profilePhoto
+        }
+    }
+
     val userHistories = history.filter { it.donorRegisterNumber == dProfile?.registerNumber }
 
     LazyColumn(
@@ -581,6 +618,252 @@ fun RegistrationScreen(
                 }
             }
 
+            // 0. Quick Status & Availability Controller Card
+            item {
+                var quickPhone by remember { mutableStateOf(dProfile.mobileNumber) }
+                var quickEmail by remember { mutableStateOf(dProfile.email) }
+                var quickLocation by remember { mutableStateOf(dProfile.location) }
+
+                // Synchronize when the overarching database profile changes
+                LaunchedEffect(dProfile.mobileNumber, dProfile.email, dProfile.location) {
+                    quickPhone = dProfile.mobileNumber
+                    quickEmail = dProfile.email
+                    quickLocation = dProfile.location
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("quick_status_control_card"),
+                    colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        // Title / Header area
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = BloodCrimson,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Quick Status & Contact Control",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextDark
+                                )
+                            }
+                            
+                            // Visual indicator of current state
+                            Surface(
+                                color = if (dProfile.availability) SuccessGreen.copy(alpha = 0.15f) else BloodCrimson.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(if (dProfile.availability) SuccessGreen else BloodCrimson, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (dProfile.availability) "ACTIVE DONOR" else "PAUSED STATUS",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (dProfile.availability) SuccessGreen else BloodCrimson
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "Toggle your real-time directory listing state and refine contact details instantly.",
+                            fontSize = 11.sp,
+                            color = LightSlate,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+
+                        Divider(color = CardBorder, modifier = Modifier.padding(vertical = 4.dp))
+
+                        // A. Interactive Availability Toggle Switch Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(WarmSlate.copy(alpha = 0.5f))
+                                .clickable {
+                                    val updatedDonor = dProfile.copy(availability = !dProfile.availability)
+                                    viewModel.updateDonorDetails(updatedDonor)
+                                    val statusMsg = if (updatedDonor.availability) "You are now active and searchable in directory!" else "You have paused donation search listings."
+                                    Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                .testTag("toggle_availability_row"),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (dProfile.availability) Icons.Default.Campaign else Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = if (dProfile.availability) SuccessGreen else LightSlate,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Visible in Live Directory",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextDark
+                                    )
+                                    Text(
+                                        text = if (dProfile.availability) "Campus patients can find and reach you" else "Hidden from directory queries",
+                                        fontSize = 10.sp,
+                                        color = LightSlate
+                                    )
+                                }
+                            }
+                            
+                            Switch(
+                                checked = dProfile.availability,
+                                onCheckedChange = { isChecked ->
+                                    val updatedDonor = dProfile.copy(availability = isChecked)
+                                    viewModel.updateDonorDetails(updatedDonor)
+                                    val statusMsg = if (isChecked) "You are now active and searchable in directory!" else "You have paused donation search listings."
+                                    Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = SuccessGreen,
+                                    uncheckedThumbColor = LightSlate,
+                                    uncheckedTrackColor = WarmSlate
+                                ),
+                                modifier = Modifier.testTag("quick_availability_switch")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // B. Quick Contact Update Section Title
+                        Text(
+                            text = "QUICK CONTACT AND DETAILS",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LightGold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Mobile input field
+                        OutlinedTextField(
+                            value = quickPhone,
+                            onValueChange = { quickPhone = it },
+                            label = { Text("Quick Mobile Number") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = null,
+                                    tint = LightSlate,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("quick_mobile_input"),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Email input field
+                        OutlinedTextField(
+                            value = quickEmail,
+                            onValueChange = { quickEmail = it },
+                            label = { Text("Quick Email ID") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Email,
+                                    contentDescription = null,
+                                    tint = LightSlate,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("quick_email_input"),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Location input field
+                        OutlinedTextField(
+                            value = quickLocation,
+                            onValueChange = { quickLocation = it },
+                            label = { Text("Quick Campus Location") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = LightSlate,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("quick_location_input"),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Trigger Button
+                        Button(
+                            onClick = {
+                                if (quickPhone.trim().isEmpty() || quickEmail.trim().isEmpty() || quickLocation.trim().isEmpty()) {
+                                    Toast.makeText(context, "Contact fields cannot be left empty.", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                val updatedDonor = dProfile.copy(
+                                    mobileNumber = quickPhone.trim(),
+                                    email = quickEmail.trim(),
+                                    location = quickLocation.trim()
+                                )
+                                viewModel.updateDonorDetails(updatedDonor)
+                                Toast.makeText(context, "Contact credentials updated and synced successfully!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("save_quick_contact_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Check, contentDescription = "Save")
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Update Live Contact Info", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             // 1. AI Eligibility Status Panel
             item {
                 val eligible = viewModel.checkIfEligible(dProfile.lastDonationDate, dProfile.weight, dProfile.gender, dProfile.dob)
@@ -748,6 +1031,145 @@ fun RegistrationScreen(
                             color = if (percentage == 100) SuccessGreen else PaavaiGold,
                             trackColor = WarmSlate
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Divider(color = CardBorder)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        var isAdvancedOpen by remember { mutableStateOf(false) }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { isAdvancedOpen = !isAdvancedOpen }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = PaavaiGold,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Deep Clinical AI Screening",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PaavaiGold
+                                )
+                            }
+                            Icon(
+                                imageVector = if (isAdvancedOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = LightSlate,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        if (isAdvancedOpen) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Flag any temporary or long-term clinical health conditions below. Gemini will perform real-time medical-style compatibility analysis.",
+                                fontSize = 11.sp,
+                                color = LightSlate,
+                                lineHeight = 15.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // List of symptoms checkboxes
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                symptomOptions.forEach { symptom ->
+                                    val isChecked = checkedSymptoms[symptom] ?: false
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable { checkedSymptoms[symptom] = !isChecked }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = isChecked,
+                                            onCheckedChange = { checkedSymptoms[symptom] = it ?: false },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = BloodCrimson,
+                                                uncheckedColor = LightSlate,
+                                                checkmarkColor = Color.White
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(symptom, fontSize = 11.sp, color = TextDark)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = {
+                                    viewModel.performAiEligibilityCheck(
+                                        lastDonationDate = dProfile.lastDonationDate,
+                                        weight = dProfile.weight,
+                                        gender = dProfile.gender,
+                                        dob = dProfile.dob,
+                                        bloodGroup = dProfile.bloodGroup,
+                                        symptoms = checkedSymptoms.toMap()
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth().testTag("run_ai_eligibility_btn"),
+                                colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
+                                shape = RoundedCornerShape(8.dp),
+                                enabled = !isCheckingAiEligibility
+                            ) {
+                                if (isCheckingAiEligibility) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Analyzing health metrics...", fontSize = 12.sp)
+                                } else {
+                                    Icon(Icons.Default.Healing, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Analyze with Gemini AI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            if (aiEligibilityResult != null) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().testTag("ai_eligibility_result_card"),
+                                    colors = CardDefaults.cardColors(containerColor = WarmSlate),
+                                    border = BorderStroke(1.dp, PaavaiGold.copy(alpha = 0.5f))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.MedicalServices,
+                                                contentDescription = null,
+                                                tint = BloodCrimson,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Clinical AI Diagnostic Report",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextDark
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = aiEligibilityResult ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextDark,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -916,20 +1338,228 @@ fun RegistrationScreen(
 
             // User's private historical donation logs
             item {
-                Text(
-                    text = "My Donation Chronicles (${userHistories.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextDark
-                )
+                var showAddHistoryDialog by remember { mutableStateOf(false) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp, bottom = 8.dp)
+                ) {
+                    Divider(color = CardBorder, modifier = Modifier.padding(bottom = 16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Donation History",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextDark,
+                                modifier = Modifier.testTag("donation_history_section_title")
+                            )
+                            Text(
+                                text = "Track your past life-saving contributions to the community",
+                                fontSize = 11.sp,
+                                color = LightSlate
+                            )
+                        }
+                        
+                        if (dProfile != null) {
+                            FilledTonalButton(
+                                onClick = { showAddHistoryDialog = true },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = DeepMaroon,
+                                    contentColor = Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("log_past_donation_btn")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Past Date", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Log Contribution", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                if (showAddHistoryDialog && dProfile != null) {
+                    var inputDate by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+                    var hospitalNameInput by remember { mutableStateOf("Paavai Blood Camp") }
+                    var validationError by remember { mutableStateOf("") }
+
+                    Dialog(onDismissRequest = { showAddHistoryDialog = false }) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("add_history_dialog"),
+                            colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.2.dp, PaavaiGold)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = "Log Past Contribution Date",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TextDark
+                                )
+
+                                Text(
+                                    text = "Enter the details of your previous blood donation. This will update your total count and clinical eligibility status dynamically.",
+                                    fontSize = 11.sp,
+                                    color = LightSlate
+                                )
+
+                                OutlinedTextField(
+                                    value = inputDate,
+                                    onValueChange = { inputDate = it },
+                                    label = { Text("Donations Date (YYYY-MM-DD)") },
+                                    modifier = Modifier.fillMaxWidth().testTag("add_history_date_input"),
+                                    singleLine = true
+                                )
+
+                                OutlinedTextField(
+                                    value = hospitalNameInput,
+                                    onValueChange = { hospitalNameInput = it },
+                                    label = { Text("Hospital or Camp Location") },
+                                    modifier = Modifier.fillMaxWidth().testTag("add_history_location_input"),
+                                    singleLine = true
+                                )
+
+                                if (validationError.isNotEmpty()) {
+                                    Text(text = validationError, color = BloodCrimson, fontSize = 11.sp)
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(onClick = { showAddHistoryDialog = false }) {
+                                        Text("Cancel", color = LightSlate)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            val parts = inputDate.split("-")
+                                            if (parts.size != 3 || parts[0].length != 4 || parts[1].length != 2 || parts[2].length != 2 ||
+                                                parts[0].toIntOrNull() == null || parts[1].toIntOrNull() == null || parts[2].toIntOrNull() == null) {
+                                                validationError = "Please use exact YYYY-MM-DD pattern (e.g. 2026-03-01)"
+                                                return@Button
+                                            }
+                                            val mMonth = parts[1].toInt()
+                                            val mDay = parts[2].toInt()
+                                            if (mMonth < 1 || mMonth > 12 || mDay < 1 || mDay > 31) {
+                                                validationError = "Please enter a valid month/day combination."
+                                                return@Button
+                                            }
+
+                                            viewModel.addManualDonationHistory(
+                                                donorRegisterNumber = dProfile.registerNumber,
+                                                date = inputDate,
+                                                units = 1,
+                                                hospitalName = hospitalNameInput.ifEmpty { "Paavai Blood Camp" }
+                                            )
+                                            showAddHistoryDialog = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
+                                        modifier = Modifier.testTag("submit_manual_history_btn")
+                                    ) {
+                                        Text("Save Log", color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (dProfile != null && userHistories.isNotEmpty()) {
+                item {
+                    val totalUnits = userHistories.sumOf { it.unitsDonated }
+                    val estimatedLivesSaved = totalUnits * 3
+                    
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                            .testTag("donation_history_stats_card"),
+                        colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, CardBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "COMMUNITY IMPACT METRIC",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LightGold,
+                                    letterSpacing = 0.5.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Your blood donations are directly helping our local community in Namakkal.",
+                                    fontSize = 11.sp,
+                                    color = LightSlate,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                            
+                            Row(
+                                modifier = Modifier.padding(start = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "$totalUnits",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = BloodCrimson
+                                    )
+                                    Text(
+                                        text = "Units",
+                                        fontSize = 10.sp,
+                                        color = LightSlate,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "$estimatedLivesSaved",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = SuccessGreen
+                                    )
+                                    Text(
+                                        text = "Lives Saved",
+                                        fontSize = 10.sp,
+                                        color = LightSlate,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if (userHistories.isEmpty()) {
                 item {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("donation_history_empty_card"),
                         colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, CardBorder)
                     ) {
                         Column(
                             modifier = Modifier
@@ -955,25 +1585,60 @@ fun RegistrationScreen(
             } else {
                 items(userHistories) { hist ->
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .testTag("donation_history_item_${hist.id}"),
                         colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, CardBorder)
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(text = hist.hospitalName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextDark)
-                                Text(text = hist.date, fontSize = 11.sp, color = LightSlate)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(BloodCrimson.copy(alpha = 0.15f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = "Contribution",
+                                        tint = BloodCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(text = hist.hospitalName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextDark)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarToday,
+                                            contentDescription = null,
+                                            tint = LightSlate,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = hist.date, fontSize = 11.sp, color = LightSlate)
+                                    }
+                                }
                             }
-                            Text(
-                                text = "+${hist.unitsDonated} Unit",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = SuccessGreen,
-                                fontSize = 14.sp
-                            )
+                            Surface(
+                                color = SuccessGreen.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "+${hist.unitsDonated} Unit",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SuccessGreen,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
                 }

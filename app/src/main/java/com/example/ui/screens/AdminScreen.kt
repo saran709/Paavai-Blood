@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +31,18 @@ import com.example.data.DonationCamp
 import com.example.data.Donor
 import com.example.ui.theme.*
 import com.example.viewmodel.BloodConnectViewModel
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import java.io.File
+import java.lang.StringBuilder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +52,9 @@ fun AdminScreen(viewModel: BloodConnectViewModel) {
     val camps by viewModel.allCamps.collectAsState()
     val isAiLoading by viewModel.isAiLoading.collectAsState()
     val predictionReport by viewModel.predictionReport.collectAsState()
+    val histories by viewModel.allHistory.collectAsState(initial = emptyList())
+
+    var showExportDialog by remember { mutableStateOf(false) }
 
     var selectedTab by remember { mutableStateOf(0) }
     val tabTitles = listOf("Registry", "Camps", "Requests")
@@ -81,27 +97,40 @@ fun AdminScreen(viewModel: BloodConnectViewModel) {
                             color = LightSlate
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            when (selectedTab) {
-                                0 -> {
-                                    selectedDonor = null
-                                    showDonorDialog = true
-                                }
-                                1 -> {
-                                    selectedCamp = null
-                                    showCampDialog = true
-                                }
-                                2 -> {
-                                    selectedRequest = null
-                                    showRequestDialog = true
-                                }
-                            }
-                        },
-                        colors = IconButtonDefaults.iconButtonColors(containerColor = BloodCrimson, contentColor = Color.White),
-                        modifier = Modifier.size(42.dp).testTag("admin_quick_add_btn")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add Item")
+                        IconButton(
+                            onClick = { showExportDialog = true },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = DarkCharcoal, contentColor = DeepMaroon),
+                            modifier = Modifier.size(42.dp).testTag("admin_csv_export_center_btn")
+                        ) {
+                            Icon(imageVector = Icons.Default.Share, contentDescription = "Export CSV", tint = DeepMaroon)
+                        }
+
+                        IconButton(
+                            onClick = {
+                                when (selectedTab) {
+                                    0 -> {
+                                        selectedDonor = null
+                                        showDonorDialog = true
+                                    }
+                                    1 -> {
+                                        selectedCamp = null
+                                        showCampDialog = true
+                                    }
+                                    2 -> {
+                                        selectedRequest = null
+                                        showRequestDialog = true
+                                    }
+                                }
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = BloodCrimson, contentColor = Color.White),
+                            modifier = Modifier.size(42.dp).testTag("admin_quick_add_btn")
+                        ) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Add Item")
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -281,6 +310,14 @@ fun AdminScreen(viewModel: BloodConnectViewModel) {
             }
         )
     }
+
+    if (showExportDialog) {
+        CSVExportCenterDialog(
+            histories = histories,
+            requests = requests,
+            onDismiss = { showExportDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -300,6 +337,38 @@ fun DonorsTabContent(
 
     val bloodDistribution = donors.groupBy { it.bloodGroup }.mapValues { it.value.size }
     val bloodGroupsMax = bloodDistribution.values.maxOrNull() ?: 1
+
+    // Search and Filtering states for Admin Dashboard
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedBloodGroup by remember { mutableStateOf("All") }
+    var selectedDepartment by remember { mutableStateOf("All") }
+    var selectedLocation by remember { mutableStateOf("All") }
+
+    val departmentsList = remember(donors) {
+        listOf("All") + donors.map { it.department.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
+    }
+    
+    val locationsList = remember(donors) {
+        listOf("All") + donors.map { it.location.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
+    }
+    
+    val bloodGroupsList = listOf("All", "O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+")
+
+    val filteredDonors = remember(donors, searchQuery, selectedBloodGroup, selectedDepartment, selectedLocation) {
+        donors.filter { donor ->
+            val matchQuery = searchQuery.isEmpty() ||
+                donor.name.contains(searchQuery, ignoreCase = true) ||
+                donor.registerNumber.contains(searchQuery, ignoreCase = true) ||
+                donor.department.contains(searchQuery, ignoreCase = true) ||
+                donor.location.contains(searchQuery, ignoreCase = true)
+            
+            val matchBg = selectedBloodGroup == "All" || donor.bloodGroup.trim().equals(selectedBloodGroup.trim(), ignoreCase = true)
+            val matchDept = selectedDepartment == "All" || donor.department.trim().equals(selectedDepartment.trim(), ignoreCase = true)
+            val matchLoc = selectedLocation == "All" || donor.location.trim().equals(selectedLocation.trim(), ignoreCase = true)
+            
+            matchQuery && matchBg && matchDept && matchLoc
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -445,9 +514,9 @@ fun DonorsTabContent(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E112C)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFAF5FF)),
                 shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.5.dp, Color(0xFFC084FC))
+                border = BorderStroke(1.dp, Color(0xFFE9D5FF))
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
@@ -459,13 +528,13 @@ fun DonorsTabContent(
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .background(Color(0xFF581C87), CircleShape),
+                                    .background(Color(0xFFF3E8FF), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = "AI PREDICT",
-                                    tint = Color(0xFFE9D5FF),
+                                    tint = Color(0xFF7E22CE),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -474,13 +543,13 @@ fun DonorsTabContent(
                                 Text(
                                     text = "AI Prediction Module",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = Color(0xFFE9D5FF),
+                                    color = TextDark,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
                                     text = "Predict Demand Scarcity & Rare Shortages",
                                     fontSize = 11.sp,
-                                    color = Color(0xFFC084FC),
+                                    color = Color(0xFF7E22CE),
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -491,7 +560,7 @@ fun DonorsTabContent(
                     Text(
                         text = "Analyzes vacation semester breaks, upcoming operations, local road incidents, and registered blood group volumes to forecast future shortages.",
                         fontSize = 12.sp,
-                        color = Color(0xFFE9D5FF),
+                        color = LightSlate,
                         lineHeight = 18.sp
                     )
 
@@ -512,7 +581,7 @@ fun DonorsTabContent(
 
                     if (isAiLoading || predictionReport != null) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Divider(color = Color(0xFFE9D5FF))
+                        Divider(color = CardBorder, thickness = 0.5.dp)
                         Spacer(modifier = Modifier.height(12.dp))
 
                         if (isAiLoading) {
@@ -521,15 +590,15 @@ fun DonorsTabContent(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                CircularProgressIndicator(color = Color(0xFFC084FC))
+                                CircularProgressIndicator(color = Color(0xFF7E22CE))
                                 Spacer(modifier = Modifier.width(16.dp))
-                                Text("Gemini parsing analytical models...", color = Color(0xFFE9D5FF), fontSize = 12.sp)
+                                Text("Gemini parsing analytical models...", color = Color(0xFF7E22CE), fontSize = 12.sp)
                             }
                         } else {
                             Text(
                                 text = predictionReport ?: "",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFF3E8FF),
+                                color = TextDark,
                                 lineHeight = 20.sp
                             )
                         }
@@ -548,12 +617,318 @@ fun DonorsTabContent(
             )
         }
 
+        // Search and Filter utility card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("admin_donor_search_filter_card"),
+                colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, CardBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Search bar
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("admin_donor_search_input"),
+                        placeholder = { Text("Search by name or register number...", fontSize = 12.sp, color = LightSlate) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = LightSlate,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear Search",
+                                        tint = LightSlate,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = DeepMaroon,
+                            unfocusedBorderColor = CardBorder,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            focusedLabelColor = DeepMaroon,
+                            unfocusedLabelColor = LightSlate,
+                            focusedTextColor = TextDark,
+                            unfocusedTextColor = TextDark
+                        )
+                    )
+
+                    // Drops layout
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Blood group dropdown
+                        Box(modifier = Modifier.weight(1f)) {
+                            var bgExpanded by remember { mutableStateOf(false) }
+                            OutlinedButton(
+                                onClick = { bgExpanded = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("filter_blood_group_btn"),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (selectedBloodGroup != "All") DeepMaroon else CardBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selectedBloodGroup != "All") RedLightBG else Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (selectedBloodGroup == "All") "Blood: All" else "Blood: $selectedBloodGroup",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selectedBloodGroup != "All") DeepMaroon else TextDark,
+                                        maxLines = 1
+                                    )
+                                    Icon(
+                                        imageVector = if (bgExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = if (selectedBloodGroup != "All") DeepMaroon else LightSlate,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = bgExpanded,
+                                onDismissRequest = { bgExpanded = false },
+                                modifier = Modifier.background(Color.White)
+                            ) {
+                                bloodGroupsList.forEach { bg ->
+                                    DropdownMenuItem(
+                                        text = { Text(bg, fontSize = 12.sp, color = if (selectedBloodGroup == bg) DeepMaroon else TextDark, fontWeight = if (selectedBloodGroup == bg) FontWeight.Bold else FontWeight.Normal) },
+                                        onClick = {
+                                            selectedBloodGroup = bg
+                                            bgExpanded = false
+                                        },
+                                        modifier = Modifier.testTag("filter_blood_group_item_$bg")
+                                    )
+                                }
+                            }
+                        }
+
+                        // Dept dropdown
+                        Box(modifier = Modifier.weight(1f)) {
+                            var deptExpanded by remember { mutableStateOf(false) }
+                            OutlinedButton(
+                                onClick = { deptExpanded = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("filter_department_btn"),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (selectedDepartment != "All") DeepMaroon else CardBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selectedDepartment != "All") RedLightBG else Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (selectedDepartment == "All") "Dept: All" else "Dept: $selectedDepartment",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selectedDepartment != "All") DeepMaroon else TextDark,
+                                        maxLines = 1
+                                    )
+                                    Icon(
+                                        imageVector = if (deptExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = if (selectedDepartment != "All") DeepMaroon else LightSlate,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = deptExpanded,
+                                onDismissRequest = { deptExpanded = false },
+                                modifier = Modifier.background(Color.White)
+                            ) {
+                                departmentsList.forEach { dept ->
+                                    DropdownMenuItem(
+                                        text = { Text(dept, fontSize = 12.sp, color = if (selectedDepartment == dept) DeepMaroon else TextDark, fontWeight = if (selectedDepartment == dept) FontWeight.Bold else FontWeight.Normal) },
+                                        onClick = {
+                                            selectedDepartment = dept
+                                            deptExpanded = false
+                                        },
+                                        modifier = Modifier.testTag("filter_department_item_$dept")
+                                    )
+                                }
+                            }
+                        }
+
+                        // Location dropdown
+                        Box(modifier = Modifier.weight(1f)) {
+                            var locExpanded by remember { mutableStateOf(false) }
+                            OutlinedButton(
+                                onClick = { locExpanded = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("filter_location_btn"),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (selectedLocation != "All") DeepMaroon else CardBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selectedLocation != "All") RedLightBG else Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (selectedLocation == "All") "Loc: All" else "Loc: $selectedLocation",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selectedLocation != "All") DeepMaroon else TextDark,
+                                        maxLines = 1
+                                    )
+                                    Icon(
+                                        imageVector = if (locExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = if (selectedLocation != "All") DeepMaroon else LightSlate,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = locExpanded,
+                                onDismissRequest = { locExpanded = false },
+                                modifier = Modifier.background(Color.White)
+                            ) {
+                                locationsList.forEach { loc ->
+                                    DropdownMenuItem(
+                                        text = { Text(loc, fontSize = 12.sp, color = if (selectedLocation == loc) DeepMaroon else TextDark, fontWeight = if (selectedLocation == loc) FontWeight.Bold else FontWeight.Normal) },
+                                        onClick = {
+                                            selectedLocation = loc
+                                            locExpanded = false
+                                        },
+                                        modifier = Modifier.testTag("filter_location_item_$loc")
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Reset and Info bar
+                    if (searchQuery.isNotEmpty() || selectedBloodGroup != "All" || selectedDepartment != "All" || selectedLocation != "All") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Filtered down to ${filteredDonors.size} registries",
+                                fontSize = 11.sp,
+                                color = LightSlate,
+                                fontWeight = FontWeight.Medium
+                            )
+
+                            TextButton(
+                                onClick = {
+                                    searchQuery = ""
+                                    selectedBloodGroup = "All"
+                                    selectedDepartment = "All"
+                                    selectedLocation = "All"
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(26.dp).testTag("admin_reset_filters_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Reset",
+                                    modifier = Modifier.size(12.dp),
+                                    tint = DeepMaroon
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Clear Filters", color = DeepMaroon, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (donors.isEmpty()) {
             item {
                 Text("Registry empty", color = LightSlate, fontSize = 12.sp)
             }
+        } else if (filteredDonors.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(imageVector = Icons.Default.Info, contentDescription = "No Results", tint = LightSlate, modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No matching donors on file",
+                            color = TextDark,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "Try searching with different options or clear all filters.",
+                            color = LightSlate,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                searchQuery = ""
+                                selectedBloodGroup = "All"
+                                selectedDepartment = "All"
+                                selectedLocation = "All"
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text("Reset Search", color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
         } else {
-            items(donors) { donor ->
+            items(filteredDonors) { donor ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
@@ -1391,6 +1766,349 @@ fun RequestFormDialog(
                     ) {
                         Text("Deploy Request", color = Color.White)
                     }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// CSV ADMINISTRATIVE REPORTING UTILITIES & DIALOG
+// =========================================================================
+
+fun generateDonationRecordsCsv(histories: List<com.example.data.DonationHistory>): String {
+    val sb = java.lang.StringBuilder()
+    sb.append("ID,Donor Name,Register Number,Date,Blood Group,Units Donated,Hospital Name\n")
+    histories.forEach { history ->
+        val escapedName = history.donorName.replace("\"", "\"\"")
+        val escapedHospital = history.hospitalName.replace("\"", "\"\"")
+        sb.append("${history.id},\"$escapedName\",${history.donorRegisterNumber},${history.date},${history.bloodGroup},${history.unitsDonated},\"$escapedHospital\"\n")
+    }
+    return sb.toString()
+}
+
+fun generateEmergencyStatsCsv(requests: List<com.example.data.BloodRequest>): String {
+    val sb = java.lang.StringBuilder()
+    sb.append("ID,Patient Name,Blood Group,Units Required,Hospital,Urgency,Contact,Contact Number,Fulfilled,Timestamp\n")
+    requests.forEach { req ->
+        val escapedPatient = req.patientName.replace("\"", "\"\"")
+        val escapedHospital = req.hospitalName.replace("\"", "\"\"")
+        val escapedContact = req.contactName.replace("\"", "\"\"")
+        val isFulfilledStr = if (req.isFulfilled) "Yes" else "No"
+        val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(req.timestamp))
+        sb.append("${req.id},\"$escapedPatient\",${req.bloodGroup},${req.unitsRequired},\"$escapedHospital\",${req.urgencyLevel},\"$escapedContact\",${req.contactNumber},$isFulfilledStr,\"$dateStr\"\n")
+    }
+    return sb.toString()
+}
+
+@Composable
+fun CSVExportCenterDialog(
+    histories: List<com.example.data.DonationHistory>,
+    requests: List<com.example.data.BloodRequest>,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    var selectedDataSet by remember { mutableStateOf(0) } // 0 = Donation History, 1 = Emergency Requests
+
+    val activeCsvContent = remember(selectedDataSet, histories, requests) {
+        if (selectedDataSet == 0) {
+            generateDonationRecordsCsv(histories)
+        } else {
+            generateEmergencyStatsCsv(requests)
+        }
+    }
+
+    val activeFilename = remember(selectedDataSet) {
+        if (selectedDataSet == 0) "paavai_donation_history.csv" else "paavai_emergency_statistics.csv"
+    }
+
+    val previewRows = remember(activeCsvContent) {
+        activeCsvContent.split("\n").take(8).filter { it.isNotBlank() }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
+                .testTag("csv_export_center_dialog"),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, CardBorder)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header Area
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(RedLightBG, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Assessment,
+                            contentDescription = "Reporting icon",
+                            tint = DeepMaroon,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Admin Report Center",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextDark
+                        )
+                        Text(
+                            text = "Download records & emergency stats as CSV",
+                            fontSize = 11.sp,
+                            color = LightSlate
+                        )
+                    }
+                }
+
+                Divider(color = CardBorder, thickness = 0.5.dp)
+
+                Text(
+                    text = "Select a dataset target below, review the tabular syntax preview, then trigger file-save pipelines or copy raw strings straight to clipboard.",
+                    fontSize = 11.sp,
+                    color = LightSlate,
+                    lineHeight = 15.sp
+                )
+
+                // Tab Selector Layout
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Button(
+                        onClick = { selectedDataSet = 0 },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedDataSet == 0) Color.White else Color.Transparent,
+                            contentColor = if (selectedDataSet == 0) DeepMaroon else LightSlate
+                        ),
+                        elevation = null,
+                        shape = RoundedCornerShape(9.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .testTag("export_select_donations"),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            text = "Donation Logs (${histories.size})",
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedDataSet == 0) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+
+                    Button(
+                        onClick = { selectedDataSet = 1 },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedDataSet == 1) Color.White else Color.Transparent,
+                            contentColor = if (selectedDataSet == 1) DeepMaroon else LightSlate
+                        ),
+                        elevation = null,
+                        shape = RoundedCornerShape(9.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .testTag("export_select_emergencies"),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            text = "Emergency Stats (${requests.size})",
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedDataSet == 1) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Table Attributes Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                    border = BorderStroke(0.5.dp, CardBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "DATA TABLE METRICS",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DeepMaroon,
+                            letterSpacing = 0.5.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Format", fontSize = 9.sp, color = LightSlate)
+                                Text("RFC 4180 CSV", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                            }
+                            Column {
+                                Text("Rows Count", fontSize = 9.sp, color = LightSlate)
+                                Text(
+                                    text = "${if (selectedDataSet == 0) histories.size else requests.size} records",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextDark
+                                )
+                            }
+                            Column {
+                                Text("Filename", fontSize = 9.sp, color = LightSlate)
+                                Text(activeFilename, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                            }
+                        }
+                    }
+                }
+
+                // Code Live Preview Window (The Slate Colored Terminal-style container)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Live CSV Row-by-Row Syntax Sample",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LightSlate
+                        )
+                        Text(
+                            text = "First ${previewRows.size} lines shown",
+                            fontSize = 9.sp,
+                            color = LightSlate
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(10.dp))
+                            .border(1.dp, CardBorder, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(previewRows) { rowString ->
+                                Text(
+                                    text = rowString,
+                                    color = if (rowString.startsWith("ID")) InfoBlue else TextDark,
+                                    fontSize = 10.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                            }
+                            if (previewRows.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = "[No records available to preview yet]",
+                                        color = LightSlate,
+                                        fontSize = 11.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Interactive Buttons Box
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Copy RAW CSV
+                    OutlinedButton(
+                        onClick = {
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(activeCsvContent))
+                            android.widget.Toast.makeText(context, "$activeFilename text copied!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .testTag("csv_btn_copy"),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, DeepMaroon),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepMaroon)
+                    ) {
+                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Save And Download/Share Csv File
+                    Button(
+                        onClick = {
+                            try {
+                                val file = java.io.File(context.cacheDir, activeFilename)
+                                file.writeText(activeCsvContent)
+
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.provider",
+                                    file
+                                )
+
+                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/csv"
+                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Paavai BloodConnect Export: $activeFilename")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+
+                                context.startActivity(android.content.Intent.createChooser(intent, "Share/Save Report CSV via"))
+                                android.widget.Toast.makeText(context, "Exporting $activeFilename file...", android.widget.Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(context, "File save error: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(44.dp)
+                            .testTag("csv_btn_download"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson)
+                    ) {
+                        Icon(imageVector = Icons.Default.Save, contentDescription = "Save file", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save & Share File", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Close Button
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .testTag("csv_btn_close"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F4F6), contentColor = LightSlate)
+                ) {
+                    Text("Close Center", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -60,4 +60,45 @@ interface BloodConnectDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(history: DonationHistory)
+
+    // --- USER ACCOUNTS ---
+    @Query("SELECT * FROM user_accounts ORDER BY name ASC")
+    fun getAllUserAccounts(): Flow<List<UserAccountEntity>>
+
+    @Query("SELECT * FROM user_accounts")
+    suspend fun getUserAccountsList(): List<UserAccountEntity>
+
+    @Query("SELECT * FROM user_accounts WHERE email = :email LIMIT 1")
+    suspend fun getUserAccountByEmail(email: String): UserAccountEntity?
+
+    @Query("SELECT * FROM user_accounts WHERE registerNumber = :regNum LIMIT 1")
+    suspend fun getUserAccountByRegisterNumber(regNum: String): UserAccountEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUserAccount(userAccount: UserAccountEntity)
+
+    @Update
+    suspend fun updateUserAccount(userAccount: UserAccountEntity)
+
+    @Delete
+    suspend fun deleteUserAccount(userAccount: UserAccountEntity)
+
+    // --- DONOR NOTIFICATIONS ---
+    @Query("SELECT * FROM donor_notifications WHERE donorRegisterNumber = :regNum ORDER BY timestamp DESC")
+    fun getNotificationsForDonor(regNum: String): Flow<List<DonorNotification>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertNotification(notification: DonorNotification): Long
+
+    @Query("UPDATE donor_notifications SET isRead = 1 WHERE id = :id")
+    suspend fun markNotificationAsRead(id: Int)
+
+    @Query("UPDATE donor_notifications SET isRead = 1 WHERE donorRegisterNumber = :regNum")
+    suspend fun markAllNotificationsAsRead(regNum: String)
+
+    @Query("DELETE FROM donor_notifications WHERE id = :id")
+    suspend fun deleteNotification(id: Int)
+
+    @Query("DELETE FROM donor_notifications WHERE donorRegisterNumber = :regNum")
+    suspend fun clearNotificationsForDonor(regNum: String)
 }
