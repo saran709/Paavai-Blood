@@ -1,23 +1,31 @@
 package com.example.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.io.Serializable
 
-@Entity(tableName = "donors")
+@Entity(
+    tableName = "donors",
+    indices = [
+        Index(value = ["registerNumber"], unique = true),
+        Index(value = ["bloodGroup"]),
+        Index(value = ["email"])
+    ]
+)
 data class Donor(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
     val registerNumber: String,
     val department: String,
-    val year: String,  // "1st Year", "2nd Year", "3rd Year", "4th Year", "Faculty", "Alumni"
+    val year: String,  // "1st Year", "2nd Year", "3rd Year", "4th Year", "Faculty"
     val bloodGroup: String, // "A+", "A-", etc.
     val mobileNumber: String,
     val email: String,
     val location: String, // e.g. "Paavai Campus", "Namakkal", "Salem", "Erode"
     val weight: Double,
     val lastDonationDate: String, // "YYYY-MM-DD" or empty
-    val userType: String = "Student", // "Student", "Faculty", "Alumni", "Local Volunteer"
+    val userType: String = "Student", // "Student", "Faculty", "Local Volunteer"
     val availability: Boolean = true,
     val totalDonations: Int = 0,
     val gender: String = "Male",
@@ -27,7 +35,14 @@ data class Donor(
     val profilePhoto: String = ""
 ) : Serializable
 
-@Entity(tableName = "blood_requests")
+@Entity(
+    tableName = "blood_requests",
+    indices = [
+        Index(value = ["bloodGroup"]),
+        Index(value = ["hospitalName"]),
+        Index(value = ["status"])
+    ]
+)
 data class BloodRequest(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val bloodGroup: String,
@@ -39,10 +54,21 @@ data class BloodRequest(
     val contactNumber: String,
     val timestamp: Long = System.currentTimeMillis(),
     val isFulfilled: Boolean = false,
-    val simulatedAlertsSent: Boolean = false
+    val simulatedAlertsSent: Boolean = false,
+    val status: String = "Requested", // "Requested", "Donor Found", "Blood Collected", "Delivered"
+    val requiredDate: String = "",
+    val specialInstructions: String = "",
+    val donorRating: Int = 0,
+    val platformRating: Int = 0,
+    val feedbackComment: String = ""
 ) : Serializable
 
-@Entity(tableName = "donation_camps")
+@Entity(
+    tableName = "donation_camps",
+    indices = [
+        Index(value = ["date"])
+    ]
+)
 data class DonationCamp(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
@@ -53,7 +79,13 @@ data class DonationCamp(
     val registeredCount: Int = 0
 ) : Serializable
 
-@Entity(tableName = "donation_history")
+@Entity(
+    tableName = "donation_history",
+    indices = [
+        Index(value = ["donorRegisterNumber"]),
+        Index(value = ["bloodGroup"])
+    ]
+)
 data class DonationHistory(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val donorName: String,
@@ -64,7 +96,12 @@ data class DonationHistory(
     val hospitalName: String = "Paavai Blood Camp"
 ) : Serializable
 
-@Entity(tableName = "user_accounts")
+@Entity(
+    tableName = "user_accounts",
+    indices = [
+        Index(value = ["registerNumber"])
+    ]
+)
 data class UserAccountEntity(
     @PrimaryKey val email: String,
     val password: String,
@@ -77,7 +114,14 @@ data class UserAccountEntity(
     val phone: String = "9876543210"
 ) : Serializable
 
-@Entity(tableName = "donor_notifications")
+@Entity(
+    tableName = "donor_notifications",
+    indices = [
+        Index(value = ["donorRegisterNumber"]),
+        Index(value = ["requestId"]),
+        Index(value = ["isRead"])
+    ]
+)
 data class DonorNotification(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val donorRegisterNumber: String, // Destination registered donor number

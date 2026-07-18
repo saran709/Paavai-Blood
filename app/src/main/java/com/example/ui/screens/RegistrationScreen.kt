@@ -33,10 +33,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.input.pointer.pointerInput
 import com.example.data.Donor
+import com.example.data.DonationHistory
 import com.example.ui.theme.*
 import com.example.viewmodel.BloodConnectViewModel
 import java.text.SimpleDateFormat
+import kotlin.math.roundToInt
 import java.util.*
 import kotlinx.coroutines.*
 
@@ -47,10 +55,187 @@ fun RegistrationScreen(
     onNavigateToDashboard: () -> Unit
 ) {
     val context = LocalContext.current
+    val userRole by viewModel.userRole.collectAsState()
+    val currentUserEmail by viewModel.currentUserEmail.collectAsState()
     val profile by viewModel.registeredProfile.collectAsState()
     val history by viewModel.allHistory.collectAsState()
     val dProfile = profile
     val scope = rememberCoroutineScope()
+
+    if (userRole == "Admin") {
+        var newPassword by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") }
+        var passwordVisible by remember { mutableStateOf(false) }
+        var confirmPasswordVisible by remember { mutableStateOf(false) }
+        var adminErrorText by remember { mutableStateOf("") }
+        var adminSuccessText by remember { mutableStateOf("") }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(WarmSlate)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Icon(
+                imageVector = Icons.Default.AdminPanelSettings,
+                contentDescription = "Admin",
+                tint = DeepMaroon,
+                modifier = Modifier.size(64.dp)
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Admin Security Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextDark
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Update the master authentication password for administrative control.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LightSlate,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = BorderStroke(1.dp, CardBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "CHANGE PASSWORD",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp,
+                        color = DeepMaroon
+                    )
+
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { 
+                            newPassword = it
+                            adminErrorText = ""
+                            adminSuccessText = ""
+                        },
+                        label = { Text("New Security Password") },
+                        modifier = Modifier.fillMaxWidth().testTag("admin_new_password_input"),
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(imageVector = image, contentDescription = null)
+                            }
+                        }
+                    )
+
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { 
+                            confirmPassword = it
+                            adminErrorText = ""
+                            adminSuccessText = ""
+                        },
+                        label = { Text("Confirm New Password") },
+                        modifier = Modifier.fillMaxWidth().testTag("admin_confirm_password_input"),
+                        singleLine = true,
+                        visualTransformation = if (confirmPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val image = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                Icon(imageVector = image, contentDescription = null)
+                            }
+                        }
+                    )
+
+                    if (adminErrorText.isNotEmpty()) {
+                        Text(
+                            text = adminErrorText,
+                            color = BloodCrimson,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (adminSuccessText.isNotEmpty()) {
+                        Text(
+                            text = adminSuccessText,
+                            color = SuccessGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (newPassword.isEmpty()) {
+                                adminErrorText = "Password cannot be empty."
+                                return@Button
+                            }
+                            if (newPassword.length < 6) {
+                                adminErrorText = "Password must be at least 6 characters."
+                                return@Button
+                            }
+                            if (newPassword != confirmPassword) {
+                                adminErrorText = "Passwords do not match."
+                                return@Button
+                            }
+
+                            viewModel.changePassword(
+                                email = currentUserEmail.ifEmpty { "admin@paavai.edu.in" },
+                                newPass = newPassword,
+                                onSuccess = {
+                                    adminSuccessText = "Admin password updated successfully!"
+                                    newPassword = ""
+                                    confirmPassword = ""
+                                    Toast.makeText(context, "Password Changed successfully!", Toast.LENGTH_SHORT).show()
+                                },
+                                onError = {
+                                    adminErrorText = it
+                                }
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DeepMaroon),
+                        modifier = Modifier.fillMaxWidth().testTag("admin_change_password_submit_btn"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("UPDATE PASSWORD", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.logout()
+                    Toast.makeText(context, "Logged out successfully!", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.fillMaxWidth().testTag("profile_logout_btn"),
+                border = BorderStroke(1.dp, DeepMaroon),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(imageVector = Icons.Default.ExitToApp, contentDescription = "Logout", tint = DeepMaroon)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Logout Admin Session", color = DeepMaroon)
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+        }
+        return
+    }
 
     var showRegisterForm by remember { mutableStateOf(dProfile == null) }
     var showCertificateDialog by remember { mutableStateOf(false) }
@@ -67,7 +252,7 @@ fun RegistrationScreen(
     var location by remember { mutableStateOf(dProfile?.location ?: "Paavai Engineering Campus") }
     var weightText by remember { mutableStateOf(dProfile?.weight?.toString() ?: "55") }
     var lastDonation by remember { mutableStateOf(dProfile?.lastDonationDate ?: "") } // YYYY-MM-DD
-    var userType by remember { mutableStateOf(dProfile?.userType ?: "Student") } // "Student", "Faculty", "Alumni"
+    var userType by remember { mutableStateOf(dProfile?.userType ?: "Student") } // "Student", "Faculty"
     var gender by remember { mutableStateOf(dProfile?.gender ?: "Male") }
     var dob by remember { mutableStateOf(dProfile?.dob ?: "2005-01-01") }
     var address by remember { mutableStateOf(dProfile?.address ?: "Namakkal, Tamil Nadu") }
@@ -133,7 +318,7 @@ fun RegistrationScreen(
                     color = TextDark
                 )
                 Text(
-                    text = "Obtain your verified digital card and download donation certificates.",
+                    text = "Obtain your verified digital card and manage your donor profile.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = LightSlate
                 )
@@ -157,7 +342,7 @@ fun RegistrationScreen(
                             color = TextDark
                         )
                         Text(
-                            text = "Input real metrics to receive matching alerts and certification records.",
+                            text = "Input real metrics to receive matching alerts and notification records.",
                             fontSize = 11.sp,
                             color = LightSlate
                         )
@@ -166,7 +351,7 @@ fun RegistrationScreen(
 
                         // Category switch
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("Student", "Faculty", "Alumni").forEach { type ->
+                            listOf("Student", "Faculty").forEach { type ->
                                 val active = type == userType
                                 Box(
                                     modifier = Modifier
@@ -307,7 +492,7 @@ fun RegistrationScreen(
                         OutlinedTextField(
                             value = email,
                             onValueChange = { email = it },
-                            label = { Text("Email (for certificate delivery)") },
+                            label = { Text("Email Address") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -566,11 +751,6 @@ fun RegistrationScreen(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Custom drawn robust vector QR Code matrix frame matching student roll number
-                        QrCodeCanvas(regNo = dProfile.registerNumber)
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -603,17 +783,6 @@ fun RegistrationScreen(
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // QR scanning code footer
-                        Text(
-                            text = "SCAN QR FOR VERIFICATION RECORDS",
-                            color = LightGold.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 8.sp,
-                            letterSpacing = 0.8.sp
-                        )
                     }
                 }
             }
@@ -1263,56 +1432,38 @@ fun RegistrationScreen(
                 }
             }
 
-            // Options: Edit profile, download certs
+            // Options: Edit profile
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                OutlinedButton(
+                    onClick = {
+                        // Prepopulate edit parameters
+                        name = dProfile.name
+                        regNo = dProfile.registerNumber
+                        dept = dProfile.department
+                        year = dProfile.year
+                        bloodGroup = dProfile.bloodGroup
+                        phone = dProfile.mobileNumber
+                        email = dProfile.email
+                        location = dProfile.location
+                        weightText = dProfile.weight.toString()
+                        lastDonation = dProfile.lastDonationDate
+                        userType = dProfile.userType
+                        gender = dProfile.gender
+                        dob = dProfile.dob
+                        address = dProfile.address
+                        emergencyContact = dProfile.emergencyContact
+                        profilePhoto = dProfile.profilePhoto
+                        showRegisterForm = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("edit_profile_btn"),
+                    border = BorderStroke(1.dp, DeepMaroon),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            // Prepopulate edit parameters
-                            name = dProfile.name
-                            regNo = dProfile.registerNumber
-                            dept = dProfile.department
-                            year = dProfile.year
-                            bloodGroup = dProfile.bloodGroup
-                            phone = dProfile.mobileNumber
-                            email = dProfile.email
-                            location = dProfile.location
-                            weightText = dProfile.weight.toString()
-                            lastDonation = dProfile.lastDonationDate
-                            userType = dProfile.userType
-                            gender = dProfile.gender
-                            dob = dProfile.dob
-                            address = dProfile.address
-                            emergencyContact = dProfile.emergencyContact
-                            profilePhoto = dProfile.profilePhoto
-                            showRegisterForm = true
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("edit_profile_btn"),
-                        border = BorderStroke(1.dp, DeepMaroon),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = DeepMaroon)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Edit Profile", color = DeepMaroon)
-                    }
-
-                    Button(
-                        onClick = { showCertificateDialog = true },
-                        modifier = Modifier
-                            .weight(1.5f)
-                            .testTag("view_certs_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.CardMembership, contentDescription = "Certificate")
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Generate Certificates")
-                    }
+                    Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = DeepMaroon)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Edit Profile", color = DeepMaroon)
                 }
             }
 
@@ -1475,6 +1626,17 @@ fun RegistrationScreen(
                             }
                         }
                     }
+                }
+            }
+
+            if (dProfile != null) {
+                item {
+                    PersonalDonationStatsChart(
+                        userHistories = userHistories,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    )
                 }
             }
 
@@ -1646,8 +1808,8 @@ fun RegistrationScreen(
         }
     }
 
-    // Elegant, premium golden certificate generator Dialog
-    if (showCertificateDialog) {
+    // Elegant, premium golden certificate generator Dialog (Deactivated)
+    if (false) {
         val dProfile = profile ?: return
         
         Dialog(onDismissRequest = { if (!isDownloadingPdf) showCertificateDialog = false }) {
@@ -1813,86 +1975,332 @@ fun RegistrationScreen(
     }
 }
 
-// Draw custom high-fidelity QR Code Matrix using Vector Canvas to represent roll numbers
 @Composable
-fun QrCodeCanvas(regNo: String) {
-    Box(
-        modifier = Modifier
-            .size(160.dp)
-            .background(Color.White, RoundedCornerShape(12.dp))
-            .border(2.dp, PaavaiGold, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // We draw custom vector lines matching a generic QR framework
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val size = size.width
-            val cellSize = size / 10
+fun PersonalDonationStatsChart(
+    userHistories: List<DonationHistory>,
+    modifier: Modifier = Modifier
+) {
+    val sortedHistories = remember(userHistories) {
+        userHistories.sortedBy { it.date }
+    }
 
-            // 1. Draw standard finder patterns at top-left, top-right, bottom-left
-            fun drawFinder(x: Float, y: Float) {
-                // Outer ring
-                drawRect(
-                    color = Color.Black,
-                    topLeft = Offset(x, y),
-                    size = Size(cellSize * 3, cellSize * 3)
-                )
-                drawRect(
-                    color = Color.White,
-                    topLeft = Offset(x + cellSize * 0.4f, y + cellSize * 0.4f),
-                    size = Size(cellSize * 2.2f, cellSize * 2.2f)
-                )
-                // Center block
-                drawRect(
-                    color = Color.Black,
-                    topLeft = Offset(x + cellSize * 0.8f, y + cellSize * 0.8f),
-                    size = Size(cellSize * 1.4f, cellSize * 1.4f)
-                )
+    var isImpactMode by remember { mutableStateOf(false) }
+    
+    val finalPoints = remember(sortedHistories, isImpactMode) {
+        if (sortedHistories.isEmpty()) {
+            listOf(
+                StudentDonationChartPoint("Term 1", 0f, 0f),
+                StudentDonationChartPoint("Term 2", 1f, 3f),
+                StudentDonationChartPoint("Term 3", 2f, 6f),
+                StudentDonationChartPoint("Term 4", 3f, 9f)
+            )
+        } else {
+            var cumulativeUnits = 0f
+            sortedHistories.mapIndexed { idx, history ->
+                cumulativeUnits += history.unitsDonated
+                val yVal = if (isImpactMode) cumulativeUnits * 3f else (idx + 1).toFloat()
+                val label = try {
+                    val parts = history.date.split("-")
+                    if (parts.size == 3) {
+                        val year = parts[0].substring(2)
+                        val month = parts[1].toInt()
+                        val monthStr = when(month) {
+                            1 -> "Jan"
+                            2 -> "Feb"
+                            3 -> "Mar"
+                            4 -> "Apr"
+                            5 -> "May"
+                            6 -> "Jun"
+                            7 -> "Jul"
+                            8 -> "Aug"
+                            9 -> "Sep"
+                            10 -> "Oct"
+                            11 -> "Nov"
+                            12 -> "Dec"
+                            else -> "M"
+                        }
+                        "$monthStr, '$year"
+                    } else {
+                        history.date
+                    }
+                } catch (e: Exception) {
+                    history.date
+                }
+                StudentDonationChartPoint(label, (idx + 1).toFloat(), yVal)
+            }
+        }
+    }
+
+    var selectedPointIndex by remember(finalPoints) { mutableStateOf(finalPoints.size - 1) }
+    val activePoint = finalPoints.getOrNull(selectedPointIndex)
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("personal_donation_stats_chart_card"),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "PERSONAL IMPACT ANALYTICS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightGold,
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isImpactMode) "Cumulative Community Impact" else "Donation Frequency & Timeline",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .background(CardBorder.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Frequency",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (!isImpactMode) Color.White else LightSlate,
+                        modifier = Modifier
+                            .background(if (!isImpactMode) DeepMaroon else Color.Transparent, RoundedCornerShape(6.dp))
+                            .clickable { isImpactMode = false }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag("stats_frequency_toggle")
+                    )
+                    Text(
+                        text = "Impact",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isImpactMode) Color.White else LightSlate,
+                        modifier = Modifier
+                            .background(if (isImpactMode) DeepMaroon else Color.Transparent, RoundedCornerShape(6.dp))
+                            .clickable { isImpactMode = true }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag("stats_impact_toggle")
+                    )
+                }
             }
 
-            // Draw finders
-            drawFinder(0f, 0f) // Top left
-            drawFinder(size - cellSize * 3, 0f) // Top right
-            drawFinder(0f, size - cellSize * 3) // Bottom left
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. Draw mock QR bits dynamically based on register string hash sequence
-            val hash = kotlin.math.abs(regNo.hashCode())
-            val random = Random(hash.toLong())
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp)
+            ) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(finalPoints) {
+                            detectTapGestures { offset ->
+                                val width = size.width
+                                val stepX = if (finalPoints.size > 1) width / (finalPoints.size - 1).toFloat() else width.toFloat()
+                                val tapIndex = (offset.x / stepX).roundToInt().coerceIn(0, finalPoints.size - 1)
+                                selectedPointIndex = tapIndex
+                            }
+                        }
+                        .testTag("personal_impact_canvas")
+                ) {
+                    val width = size.width
+                    val height = size.height
+                    val pointCount = finalPoints.size
+                    
+                    if (pointCount > 0) {
+                        val maxVal = finalPoints.maxOf { it.pointYValue }.coerceAtLeast(1f)
+                        val stepX = if (pointCount > 1) width / (pointCount - 1).toFloat() else width
 
-            for (col in 0..9) {
-                for (row in 0..9) {
-                    // Skip finders are
-                    val inTopLeft = col in 0..2 && row in 0..2
-                    val inTopRight = col in 7..9 && row in 0..2
-                    val inBottomLeft = col in 0..2 && row in 7..9
-                    val isCenterSpace = col in 4..5 && row in 4..5 // Center red drop area
-
-                    if (!inTopLeft && !inTopRight && !inBottomLeft && !isCenterSpace) {
-                        // Draw bit if random threshold succeeds
-                        if (random.nextFloat() > 0.45f) {
-                            drawRect(
-                                color = Color.DarkGray,
-                                topLeft = Offset(col * cellSize, row * cellSize),
-                                size = Size(cellSize * 0.9f, cellSize * 0.9f)
+                        val gridLines = 3
+                        for (i in 0..gridLines) {
+                            val yCoord = height * (i / gridLines.toFloat())
+                            drawLine(
+                                color = CardBorder.copy(alpha = 0.3f),
+                                strokeWidth = 1f,
+                                start = Offset(0f, yCoord),
+                                end = Offset(width, yCoord)
                             )
+                        }
+
+                        val pts = finalPoints.mapIndexed { idx, pt ->
+                            val x = if (pointCount > 1) idx * stepX else width / 2f
+                            val y = height - (pt.pointYValue / maxVal * (height - 30.dp.toPx())) - 15.dp.toPx()
+                            Offset(x, y)
+                        }
+
+                        val path = Path()
+                        val areaPath = Path()
+
+                        path.moveTo(pts[0].x, pts[0].y)
+                        areaPath.moveTo(pts[0].x, height)
+                        areaPath.lineTo(pts[0].x, pts[0].y)
+
+                        for (i in 1 until pts.size) {
+                            val prev = pts[i - 1]
+                            val curr = pts[i]
+                            val cp1X = prev.x + (curr.x - prev.x) / 2f
+                            val cp1Y = prev.y
+                            val cp2X = prev.x + (curr.x - prev.x) / 2f
+                            val cp2Y = curr.y
+
+                            path.cubicTo(cp1X, cp1Y, cp2X, cp1Y, curr.x, curr.y)
+                            areaPath.cubicTo(cp1X, cp1Y, cp2X, cp1Y, curr.x, curr.y)
+                        }
+
+                        areaPath.lineTo(pts.last().x, height)
+                        areaPath.close()
+
+                        drawPath(
+                            path = areaPath,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    BloodCrimson.copy(alpha = 0.15f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+
+                        drawPath(
+                            path = path,
+                            color = if (sortedHistories.isEmpty()) LightSlate.copy(alpha = 0.5f) else DeepMaroon,
+                            style = Stroke(
+                                width = 2.5.dp.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
+                        
+                        if (sortedHistories.isEmpty()) {
+                            val idealDottedPath = Path().apply {
+                                moveTo(0f, height - 15.dp.toPx())
+                                lineTo(width, 15.dp.toPx())
+                            }
+                            drawPath(
+                                path = idealDottedPath,
+                                color = SuccessGreen.copy(alpha = 0.4f),
+                                style = Stroke(
+                                    width = 1.5.dp.toPx(),
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                                )
+                            )
+                        }
+
+                        pts.forEachIndexed { index, pt ->
+                            val isSelected = index == selectedPointIndex
+                            if (isSelected) {
+                                drawCircle(
+                                    color = LightGold,
+                                    radius = 6.dp.toPx(),
+                                    center = pt
+                                )
+                                drawCircle(
+                                    color = DeepMaroon,
+                                    radius = 3.5.dp.toPx(),
+                                    center = pt
+                                )
+                            } else {
+                                drawCircle(
+                                    color = BloodCrimson.copy(alpha = 0.8f),
+                                    radius = 3.2.dp.toPx(),
+                                    center = pt
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // Draw an overlay center blood drop red cross
-            val center = size / 2
-            drawCircle(
-                color = Color.White,
-                radius = cellSize,
-                center = Offset(center, center)
-            )
-            // Draw small simple blood cross in the middle
-            drawCircle(
-                color = Color(0xFFD32F2F),
-                radius = cellSize * 0.7f,
-                center = Offset(center, center)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                finalPoints.forEachIndexed { idx, pt ->
+                    val isSelected = idx == selectedPointIndex
+                    Text(
+                        text = pt.xLabel,
+                        fontSize = 9.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) DeepMaroon else LightSlate,
+                        modifier = Modifier
+                            .clickable { selectedPointIndex = idx }
+                            .padding(vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Divider(color = CardBorder.copy(alpha = 0.3f), thickness = 0.5.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            activePoint?.let { pt ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isImpactMode) Icons.Default.Favorite else Icons.Default.ShowChart,
+                            contentDescription = "",
+                            tint = if (isImpactMode) SuccessGreen else BloodCrimson,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isImpactMode) {
+                                "Estimated Impact: ~${pt.pointYValue.toInt()} Lives Saved"
+                            } else {
+                                "Donation Event #${pt.pointYValue.toInt()}: Verified"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextDark
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (sortedHistories.isEmpty()) Color(0xFFFEF2F2) else Color(0xFFECFDF5)
+                    ) {
+                        Text(
+                            text = if (sortedHistories.isEmpty()) "Blueprint View" else "Logged Log",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (sortedHistories.isEmpty()) DeepMaroon else SuccessGreen,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            if (sortedHistories.isEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "💡 Ideal Trend Model Displayed. Each formal blood donation yields 1 Unit (saving up to 3 local patients). Start logging your historical donations to render your actual personal telemetry live!",
+                    fontSize = 10.sp,
+                    color = LightSlate,
+                    lineHeight = 14.sp
+                )
+            }
         }
     }
 }
+
+data class StudentDonationChartPoint(
+    val xLabel: String,
+    val xIndex: Float,
+    val pointYValue: Float
+)

@@ -68,6 +68,10 @@ fun RequestsScreen(
     var showBroadcastSuccessToast by remember { mutableStateOf(false) }
     var activeBroadcastJobNum by remember { mutableStateOf("") }
 
+    var hospitalRequiredDate by remember { mutableStateOf("2026-07-18") }
+    var hospitalSpecialInstructions by remember { mutableStateOf("Report to Emergency Block reception desk on arrival.") }
+    var feedbackTargetRequest by remember { mutableStateOf<BloodRequest?>(null) }
+
     // Global matching forecasts accessible to both screen tabs and dialog overlays
     val compatibleGroups = remember(hospitalBloodGroup) {
         when (hospitalBloodGroup.uppercase()) {
@@ -216,7 +220,7 @@ fun RequestsScreen(
                 // Requests Lists Header
                 item {
                     Text(
-                        text = "Recent Dispatch Logs",
+                        text = "Recent Blood Requests",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextDark
@@ -437,35 +441,43 @@ fun RequestsScreen(
                                             }
                                         } else {
                                             // Student Donor flow: Commit to Donate!
+                                            val isUserEligible = profile?.let {
+                                                viewModel.checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob)
+                                            } ?: true
+
                                             var hasCommitted by remember { mutableStateOf(false) }
                                             Button(
                                                 onClick = {
-                                                    hasCommitted = true
-                                                    try {
-                                                        // Dial coordinator contact instantly for immediate coordination!
-                                                        val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                                                            data = Uri.parse("tel:${request.contactNumber}")
+                                                    if (isUserEligible) {
+                                                        hasCommitted = true
+                                                        try {
+                                                            // Dial coordinator contact instantly for immediate coordination!
+                                                            val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                                                                data = Uri.parse("tel:${request.contactNumber}")
+                                                            }
+                                                            context.startActivity(dialIntent)
+                                                        } catch (e: Exception) {
+                                                            // ignore
                                                         }
-                                                        context.startActivity(dialIntent)
-                                                    } catch (e: Exception) {
-                                                        // ignore
                                                     }
                                                 },
+                                                enabled = isUserEligible,
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (hasCommitted) SuccessGreen else BloodCrimson
+                                                    containerColor = if (hasCommitted) SuccessGreen else if (!isUserEligible) Color.Gray else BloodCrimson,
+                                                    disabledContainerColor = Color.Gray.copy(alpha = 0.5f)
                                                 ),
                                                 shape = RoundedCornerShape(8.dp),
                                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                                 modifier = Modifier.testTag("commit_donate_btn_${request.id}")
                                             ) {
                                                 Icon(
-                                                    imageVector = if (hasCommitted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                    imageVector = if (hasCommitted) Icons.Default.Favorite else if (!isUserEligible) Icons.Default.Block else Icons.Default.FavoriteBorder,
                                                     contentDescription = "Love",
                                                     modifier = Modifier.size(14.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
-                                                    text = if (hasCommitted) "COMMITTED ♥" else "COMMIT TO DONATE",
+                                                    text = if (hasCommitted) "COMMITTED ♥" else if (!isUserEligible) "RECOVERY (90D)" else "COMMIT TO DONATE",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = Color.White
@@ -611,10 +623,32 @@ fun RequestsScreen(
                                 value = hospitalPatientName,
                                 onValueChange = { hospitalPatientName = it },
                                 label = { Text("Patient Case/Reference Code") },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().testTag("hospital_patient_input"),
                                 isError = hospitalPatientName.isEmpty(),
                                 singleLine = true
                             )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = hospitalRequiredDate,
+                                    onValueChange = { hospitalRequiredDate = it },
+                                    label = { Text("Required By Date") },
+                                    placeholder = { Text("YYYY-MM-DD") },
+                                    modifier = Modifier.weight(1f).testTag("hospital_req_date"),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = hospitalSpecialInstructions,
+                                    onValueChange = { hospitalSpecialInstructions = it },
+                                    label = { Text("Special Instructions") },
+                                    placeholder = { Text("e.g. Room 402, Emergency Ward") },
+                                    modifier = Modifier.weight(1.5f).testTag("hospital_instructions"),
+                                    singleLine = true
+                                )
+                            }
 
                             // Blood group selector matrix
                             Text("Target Blood Group Required:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
@@ -867,7 +901,9 @@ fun RequestsScreen(
                                 patientName = hospitalPatientName,
                                 urgency = hospitalUrgencyLevel,
                                 contactName = "Dr. S. K. Vasudevan (Emergency Node)",
-                                contactPhone = "+91 9443210984"
+                                contactPhone = "+91 9443210984",
+                                requiredDate = hospitalRequiredDate,
+                                specialInstructions = hospitalSpecialInstructions
                             )
 
                             // Populate real-time logger
@@ -942,6 +978,259 @@ fun RequestsScreen(
                                         lineHeight = 15.sp,
                                         modifier = Modifier.padding(vertical = 2.dp)
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 6. Hospital Requisition History & Feedback Section
+                item {
+                    Divider(modifier = Modifier.padding(vertical = 12.dp), color = CardBorder)
+                    Text(
+                        text = "📋 Requisition Collaboration History",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark,
+                        modifier = Modifier.padding(bottom = 4.dp).testTag("hospital_history_title")
+                    )
+                    Text(
+                        text = "Track status of requests submitted by ${activeHospital.name} and provide responsiveness reviews.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LightSlate,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+
+                val hospitalRequests = requests.filter { it.hospitalName.trim().lowercase() == activeHospital.name.trim().lowercase() }
+
+                if (hospitalRequests.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().testTag("hospital_empty_history_card"),
+                            colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "Empty History",
+                                    tint = LightSlate,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "No Requisitions Logged",
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextDark,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "This affiliate node has no past broadcast entries in the Room registry.",
+                                    color = LightSlate,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(hospitalRequests) { req ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .testTag("hospital_history_card_${req.id}"),
+                            colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
+                            border = BorderStroke(1.dp, CardBorder),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                // Request Header
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Patient: ${req.patientName}",
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextDark,
+                                            fontSize = 14.sp
+                                        )
+                                        Text(
+                                            text = "Requisition ID: req-#${req.id}",
+                                            fontSize = 11.sp,
+                                            color = LightSlate
+                                        )
+                                    }
+                                    // Urgency and overall state
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Surface(
+                                            color = if (req.urgencyLevel == "Critical") BloodCrimson else if (req.urgencyLevel == "High") PaavaiGold else InfoBlue,
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = req.urgencyLevel.uppercase(),
+                                                color = Color.White,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Surface(
+                                            color = if (req.isFulfilled) SuccessGreen.copy(alpha = 0.2f) else Color.Gray.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = if (req.isFulfilled) "FULFILLED" else "PENDING",
+                                                color = if (req.isFulfilled) SuccessGreen else LightSlate,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Divider(modifier = Modifier.padding(vertical = 10.dp), color = CardBorder)
+
+                                // Details (Group, Units, Date, Instructions)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Blood Group Needed", fontSize = 10.sp, color = LightSlate)
+                                        Text(req.bloodGroup, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = BloodCrimson)
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Units Required", fontSize = 10.sp, color = LightSlate)
+                                        Text("${req.unitsRequired} Units", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                    }
+                                    Column(modifier = Modifier.weight(1.2f)) {
+                                        Text("Required By Date", fontSize = 10.sp, color = LightSlate)
+                                        Text(req.requiredDate.ifEmpty { "Not specified" }, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                    }
+                                }
+
+                                if (req.specialInstructions.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Special Instructions:", fontSize = 10.sp, color = LightSlate, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = req.specialInstructions,
+                                        fontSize = 11.sp,
+                                        color = TextDark,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Real-Time Status Tracker Stepper
+                                Text(
+                                    text = "🔄 Track Collaboration Status:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextDark
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                val statusOptions = listOf("Requested", "Donor Found", "Blood Collected", "Delivered")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    statusOptions.forEach { statusOpt ->
+                                        val isCurrent = req.status == statusOpt
+                                        val isPassed = statusOptions.indexOf(statusOpt) < statusOptions.indexOf(req.status)
+                                        val bg = if (isCurrent) BloodCrimson else if (isPassed) SuccessGreen.copy(alpha = 0.2f) else WarmSlate
+                                        val tc = if (isCurrent) Color.White else if (isPassed) SuccessGreen else TextDark
+                                        
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(bg)
+                                                .clickable {
+                                                    viewModel.updateRequestStatus(req.id, statusOpt)
+                                                }
+                                                .padding(vertical = 6.dp)
+                                                .testTag("status_chip_${req.id}_$statusOpt"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = statusOpt,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = tc
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Feedback & Ratings System Card Block
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = WarmSlate),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        if (req.donorRating > 0 || req.platformRating > 0) {
+                                            Text("⭐ Hospital Feedback Review Submitted", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PaavaiGold)
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                Column {
+                                                    Text("Donor Responsiveness", fontSize = 9.sp, color = LightSlate)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Filled.Star, contentDescription = null, tint = PaavaiGold, modifier = Modifier.size(12.dp))
+                                                        Spacer(modifier = Modifier.width(2.dp))
+                                                        Text("${req.donorRating}/5", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                                    }
+                                                }
+                                                Column {
+                                                    Text("Platform Speed/Aid", fontSize = 9.sp, color = LightSlate)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Filled.Star, contentDescription = null, tint = PaavaiGold, modifier = Modifier.size(12.dp))
+                                                        Spacer(modifier = Modifier.width(2.dp))
+                                                        Text("${req.platformRating}/5", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                                    }
+                                                }
+                                            }
+                                            if (req.feedbackComment.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("Comments: \"${req.feedbackComment}\"", fontSize = 11.sp, color = TextDark)
+                                            }
+                                        } else {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1.5f)) {
+                                                    Text("Rate platform & donor speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                                                    Text("Help us optimize rapid Paavai mobilizations.", fontSize = 9.sp, color = LightSlate)
+                                                }
+                                                Button(
+                                                    onClick = { feedbackTargetRequest = req },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = DeepMaroon),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                    modifier = Modifier.weight(1f).testTag("hospital_submit_feedback_trigger_${req.id}")
+                                                ) {
+                                                    Text("Rate Node", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1279,6 +1568,117 @@ fun RequestsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                         ) {
                             Text("Confirm Fulfillment")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Hospital feedback submission dialog
+    feedbackTargetRequest?.let { req ->
+        var donorRatingState by remember { mutableStateOf(5) }
+        var platformRatingState by remember { mutableStateOf(5) }
+        var commentState by remember { mutableStateOf("Excellent collaboration! The donor arrived very fast.") }
+
+        Dialog(onDismissRequest = { feedbackTargetRequest = null }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .testTag("hospital_feedback_dialog"),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(DarkCharcoal)
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = "⭐ Rate Requisition Performance",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                    Text(
+                        text = "Submit responsiveness ratings for Requisition req-#${req.id} (Patient: ${req.patientName}).",
+                        fontSize = 11.sp,
+                        color = LightSlate
+                    )
+
+                    Divider()
+
+                    // Donor Responsiveness Stars
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Donor Responsiveness & Speed:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            (1..5).forEach { star ->
+                                val active = star <= donorRatingState
+                                Icon(
+                                    imageVector = if (active) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = "Donor Rating $star Star",
+                                    tint = if (active) PaavaiGold else Color.Gray,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clickable { donorRatingState = star }
+                                        .testTag("donor_star_${star}")
+                                )
+                            }
+                        }
+                    }
+
+                    // Platform Responsiveness Stars
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Platform Speed & Ease of Use:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            (1..5).forEach { star ->
+                                val active = star <= platformRatingState
+                                Icon(
+                                    imageVector = if (active) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = "Platform Rating $star Star",
+                                    tint = if (active) PaavaiGold else Color.Gray,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clickable { platformRatingState = star }
+                                        .testTag("platform_star_${star}")
+                                )
+                            }
+                        }
+                    }
+
+                    // Comments input
+                    OutlinedTextField(
+                        value = commentState,
+                        onValueChange = { commentState = it },
+                        label = { Text("Written Comments (Optional)") },
+                        modifier = Modifier.fillMaxWidth().testTag("feedback_comments_input"),
+                        singleLine = false,
+                        maxLines = 3
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { feedbackTargetRequest = null }) {
+                            Text("Cancel", color = LightSlate)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                viewModel.submitRequestFeedback(
+                                    requestId = req.id,
+                                    donorRating = donorRatingState,
+                                    platformRating = platformRatingState,
+                                    feedbackComment = commentState
+                                )
+                                feedbackTargetRequest = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
+                            modifier = Modifier.testTag("submit_feedback_confirm_btn")
+                        ) {
+                            Text("Submit Review")
                         }
                     }
                 }

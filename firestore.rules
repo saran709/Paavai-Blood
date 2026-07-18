@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if the user is signed in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to verify if the request is modifying their own donor document
+    // We assume the document ID is either their registered email or registration number
+    function isOwner(docId) {
+      return isAuthenticated() && (request.auth.token.email == docId || request.auth.token.email == resource.data.email);
+    }
+
+    // Helper function to check if user is an institutional administrator
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'Admin';
+    }
+
+    // Security Rules for the Donors Collection
+    match /donors/{donorId} {
+      // Profiles are visible to registered users (e.g. hospitals looking for donors, or members of the college)
+      allow read: if isAuthenticated();
+      
+      // Creating a profile requires the user to be authenticated and matches their identity or done by an admin
+      allow create: if isAuthenticated() && (request.auth.token.email == request.resource.data.email || isAdmin());
+      
+      // Updates are restricted to either the owner of the profile (to toggle availability, change phone etc.) or an admin
+      allow update: if isOwner(donorId) || isAdmin();
+      
+      // Deletions are strictly restricted to administrators for data protection
+      allow delete: if isAdmin();
+
+      // Nested history tracking subcollection
+      match /donation_history/{historyId} {
+        allow read: if isAuthenticated();
+        allow create, update: if isOwner(donorId) || isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+  }
+}

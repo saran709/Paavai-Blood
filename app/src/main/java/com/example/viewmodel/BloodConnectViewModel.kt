@@ -31,7 +31,11 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
     val cachedAccounts = MutableStateFlow<Map<String, UserAccountEntity>>(emptyMap())
 
     fun login(email: String, word: String): Boolean {
-        val account = cachedAccounts.value[email.trim().lowercase()]
+        val trimEmail = email.trim().lowercase()
+        if (!trimEmail.endsWith("@paavai.edu.in")) {
+            return false
+        }
+        val account = cachedAccounts.value[trimEmail]
         if (account != null && account.password == word) {
             activeUserRegNumber.value = account.registerNumber
             userRole.value = account.role
@@ -44,6 +48,58 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         return false
     }
 
+    suspend fun loginLive(email: String, word: String): Boolean = withContext(Dispatchers.IO) {
+        val trimEmail = email.trim().lowercase()
+        if (!trimEmail.endsWith("@paavai.edu.in")) {
+            return@withContext false
+        }
+        
+        // 1. Direct query of User Account from Room DB to prevent any flow sync lag
+        val account = try {
+            dao.getUserAccountByEmail(trimEmail)
+        } catch (e: Exception) {
+            android.util.Log.e("ViewModel", "Direct Room account query failed: ${e.message}")
+            null
+        }
+
+        if (account != null) {
+            if (account.password == word) {
+                withContext(Dispatchers.Main) {
+                    activeUserRegNumber.value = account.registerNumber
+                    userRole.value = account.role
+                    currentUserEmail.value = account.email
+                    currentUserName.value = account.name
+                    isLoggedIn.value = true
+                }
+                syncProfile()
+                return@withContext true
+            } else {
+                android.util.Log.d("ViewModel", "Password mismatch locally, preparing live fallback.")
+            }
+        }
+
+        // 2. Direct remote query against cloud schema (GoTrue with Rest fallback)
+        if (SupabaseClient.isConfigured()) {
+            try {
+                val remoteAccount = SupabaseClient.authenticateRemote(trimEmail, word, dao)
+                if (remoteAccount != null) {
+                    withContext(Dispatchers.Main) {
+                        activeUserRegNumber.value = remoteAccount.registerNumber
+                        userRole.value = remoteAccount.role
+                        currentUserEmail.value = remoteAccount.email
+                        currentUserName.value = remoteAccount.name
+                        isLoggedIn.value = true
+                    }
+                    syncProfile()
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ViewModel", "Supabase authentication failed: ${e.message}")
+            }
+        }
+        return@withContext false
+    }
+
     fun signup(
         name: String,
         email: String,
@@ -53,9 +109,13 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         year: String,
         bloodGroup: String,
         phone: String,
-        role: String
+        role: String,
+        userType: String = "Student"
     ): Boolean {
         val trimEmail = email.trim().lowercase()
+        if (!trimEmail.endsWith("@paavai.edu.in")) {
+            return false // Domain restricted
+        }
         if (cachedAccounts.value.containsKey(trimEmail)) {
             return false // Account already exists
         }
@@ -88,11 +148,26 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
                     location = "Paavai Engineering Campus",
                     weight = 65.0,
                     lastDonationDate = "",
-                    userType = if (role == "Volunteer") "Local Volunteer" else "Student",
+                    userType = userType,
                     availability = true,
                     totalDonations = 0
                 )
                 dao.insertDonor(newDonor)
+            }
+            if (SupabaseClient.isConfigured()) {
+                SupabaseClient.signUpRemote(
+                    email = trimEmail,
+                    word = pass,
+                    name = name,
+                    registerNumber = regNo,
+                    role = role,
+                    department = dept,
+                    year = year,
+                    bloodGroup = bloodGroup,
+                    phone = phone,
+                    userType = userType,
+                    dao = dao
+                )
             }
             syncWithSupabase()
         }
@@ -110,6 +185,46 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         isLoggedIn.value = false
         currentUserEmail.value = ""
         currentUserName.value = ""
+    }
+
+    fun changePassword(email: String, newPass: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val trimEmail = email.trim().lowercase()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val account = dao.getUserAccountByEmail(trimEmail)
+                if (account != null) {
+                    val updated = account.copy(password = newPass)
+                    dao.insertUserAccount(updated)
+                    if (SupabaseClient.isConfigured()) {
+                        SupabaseClient.signUpRemote(
+                            email = trimEmail,
+                            word = newPass,
+                            name = account.name,
+                            registerNumber = account.registerNumber,
+                            role = account.role,
+                            department = account.department,
+                            year = account.year,
+                            bloodGroup = account.bloodGroup,
+                            phone = account.phone,
+                            userType = if (account.role == "Admin") "Admin" else "Student",
+                            dao = dao
+                        )
+                    }
+                    syncWithSupabase()
+                    withContext(Dispatchers.Main) {
+                        onSuccess()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onError("Account not found.")
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError(e.localizedMessage ?: "Failed to change password.")
+                }
+            }
+        }
     }
 
     // Flow State variables
@@ -149,6 +264,27 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
     val supabaseQueryError = MutableStateFlow<String?>(null)
 
     init {
+        // Enforce presence of default presets in user_accounts table block (Room safety seed)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val list = dao.getUserAccountsList()
+                if (list.isEmpty()) {
+                    val defaultAccounts = listOf(
+                        UserAccountEntity(
+                            email = "admin@paavai.edu.in",
+                            password = "blood@123",
+                            name = "Administrator",
+                            registerNumber = "ADM001",
+                            role = "Admin"
+                        )
+                    )
+                    defaultAccounts.forEach { dao.insertUserAccount(it) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ViewModel", "Failed to seed default accounts: ${e.message}")
+            }
+        }
+
         // Collect user accounts from Room database to keep our local login cache always synced
         viewModelScope.launch(Dispatchers.IO) {
             dao.getAllUserAccounts().collect { list ->
@@ -181,7 +317,40 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
 
     private fun syncProfile() {
         viewModelScope.launch(Dispatchers.IO) {
-            val profile = dao.getDonorByRegisterNumber(activeUserRegNumber.value)
+            val regNo = activeUserRegNumber.value
+            var profile = dao.getDonorByRegisterNumber(regNo)
+            
+            if (profile == null && regNo.isNotBlank()) {
+                // If a user has a valid login account but is missing a donor record, auto-provision one
+                val account = dao.getUserAccountByRegisterNumber(regNo) 
+                    ?: dao.getUserAccountByEmail(currentUserEmail.value)
+                
+                if (account != null) {
+                    val isVolt = account.role == "Volunteer"
+                    val newDonor = Donor(
+                        name = account.name,
+                        registerNumber = account.registerNumber,
+                        department = account.department,
+                        year = account.year,
+                        bloodGroup = account.bloodGroup,
+                        mobileNumber = account.phone,
+                        email = account.email,
+                        location = "Paavai Engineering Campus",
+                        weight = 65.0,
+                        lastDonationDate = "",
+                        userType = if (isVolt) "Local Volunteer" else "Student",
+                        availability = true,
+                        totalDonations = if (isVolt) 0 else 1 // pre-populate 1 for realistic stats
+                    )
+                    try {
+                        dao.insertDonor(newDonor)
+                        profile = newDonor
+                        android.util.Log.d("ViewModel", "Automatically provisioned donor profile for ${account.name}")
+                    } catch (e: Exception) {
+                        android.util.Log.e("ViewModel", "Failed to auto-provision donor: ${e.message}")
+                    }
+                }
+            }
             registeredProfile.value = profile
         }
     }
@@ -301,7 +470,9 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
         patientName: String,
         urgency: String,
         contactName: String,
-        contactPhone: String
+        contactPhone: String,
+        requiredDate: String = "",
+        specialInstructions: String = ""
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             val req = BloodRequest(
@@ -312,7 +483,10 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
                 urgencyLevel = urgency,
                 contactName = contactName,
                 contactNumber = contactPhone,
-                simulatedAlertsSent = urgency == "Critical" || urgency == "High"
+                simulatedAlertsSent = urgency == "Critical" || urgency == "High",
+                status = "Requested",
+                requiredDate = requiredDate,
+                specialInstructions = specialInstructions
             )
             val reqId = dao.insertRequest(req)
             
@@ -321,6 +495,25 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
                 createNotificationsForRequest(reqId.toInt(), bloodGroup, hospitalName, patientName, urgency)
             }
             performAiMatching(req.copy(id = reqId.toInt()))
+            syncWithSupabase()
+        }
+    }
+
+    // Update Blood Request Status (Real-time tracking)
+    fun updateRequestStatus(requestId: Int, newStatus: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateRequestStatus(requestId, newStatus)
+            if (newStatus == "Delivered") {
+                dao.setRequestFulfilled(requestId, true)
+            }
+            syncWithSupabase()
+        }
+    }
+
+    // Submit Hospital Feedback
+    fun submitRequestFeedback(requestId: Int, donorRating: Int, platformRating: Int, feedbackComment: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.submitRequestFeedback(requestId, donorRating, platformRating, feedbackComment)
             syncWithSupabase()
         }
     }
@@ -663,26 +856,70 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
             val candidates = findCandidatesLocal(request.bloodGroup)
             matchedDonorsList.value = candidates
 
+            val histories = allHistory.value
+            val historiesByDonor = histories.groupBy { it.donorRegisterNumber }
+
+            val donorDetailsText = candidates.joinToString("\n\n") { donor ->
+                val donorHistories = historiesByDonor[donor.registerNumber] ?: emptyList()
+                val isEligible = checkIfEligible(donor.lastDonationDate, donor.weight, donor.gender, donor.dob)
+                val eligibilityStatus = if (isEligible) "ELIGIBLE NOW" else "NOT ELIGIBLE (Under recovery/weight limit)"
+                val daysLeft = if (isEligible) 0 else daysUntilEligible(donor.lastDonationDate, donor.gender)
+                val historyString = if (donorHistories.isEmpty()) {
+                    "No logged history records in database."
+                } else {
+                    donorHistories.joinToString("; ") { "${it.date} (${it.unitsDonated} units at ${it.hospitalName})" }
+                }
+                
+                """
+                - Donor: ${donor.name} (ID/Reg: ${donor.registerNumber})
+                  Blood Group: ${donor.bloodGroup}
+                  Gender: ${donor.gender}, Age: ${calculateAge(donor.dob)} years, Weight: ${donor.weight}kg
+                  User-Type: ${donor.userType}, Department: ${donor.department}
+                  Current Location: ${donor.location}
+                  Self-reported Availability: ${donor.availability}
+                  Computed Clinical Eligibility: $eligibilityStatus (Days remaining: $daysLeft)
+                  Total Lifetime Donations: ${donor.totalDonations} (Logged app donation history records: ${donorHistories.size})
+                  Donations History Log: $historyString
+                  Contact Number: ${donor.mobileNumber}
+                """.trimIndent()
+            }
+
             val prompt = """
-                You are the AI Core of Paavai BloodConnect, an emergency blood donor network inside Paavai Institutions, Namakkal, Tamil Nadu.
-                Calculate eligibility, safety parameters, and rank donors scientifically.
+                You are the AI Matchmaking Engine of Paavai BloodConnect, an emergency blood donor network inside Paavai Institutions, Namakkal, Tamil Nadu.
+                Hospitals need a ranked list of the most reliable potential donors for a specific emergency blood request.
+                You must analyze donor availability, eligibility rules, and historical donation frequency to produce this ranked list.
                 
                 Emergency Request Details:
-                - Patient: ${request.patientName} (Urgency: ${request.urgencyLevel})
-                - Blood Group Needed: ${request.bloodGroup}
-                - Units Required: ${request.unitsRequired}
+                - Patient Case: ${request.patientName} (Urgency Level: ${request.urgencyLevel})
+                - Blood Group Required: ${request.bloodGroup}
+                - Volume Needed: ${request.unitsRequired} Units
                 - Hospital Location: ${request.hospitalName}
                 
-                Here are the registered candidate donors in the ecosystem:
-                ${candidates.joinToString("\n") { 
-                    "- ${it.name} (${it.bloodGroup}, Register: ${it.registerNumber}, Dept: ${it.department}, Weight: ${it.weight}kg, Last Donation: ${it.lastDonationDate.ifEmpty { "Never" }}, User-Type: ${it.userType}, Location: ${it.location})" 
-                }}
+                Here are the registered candidate donors in our ecosystem with their profiles and historical donation records:
+                $donorDetailsText
                 
-                Please generate a highly professional Emergency Donation Assessment in standard Markdown format matching these exact rules:
-                1. Ranks the top 3 best available matched donors. Highlight the critical universal donor O- where useful.
-                2. Explicitly comment on eligibility rules (weight must be >=45kg, last donation must be >90 days ago). If any candidates fail these rules, mark them as ineligible with the date they next qualify.
-                3. Address the geographical location (e.g. distance from Paavai Engineering Campus/Rasipuram to the specified hospital).
-                4. Keep the tone clinical, positive, and direct. Use bullet points and clean structure.
+                Please generate a comprehensive, highly professional Emergency Donor Reliability & Match Assessment in standard Markdown. Follow these rules strictly:
+                
+                1. TITLE: Start with "### 🧠 Gemini Intelligent Donor Reliability & Match Assessment"
+                
+                2. RANKED RELIABILITY ANALYSIS (MOST RELIABLE POTENTIAL DONORS):
+                   Rank the top 3 best eligible and available donors in order of reliability.
+                   - Evaluate reliability by checking both the self-reported `Availability: true` and their "Historical Donation Frequency" (total donations count, frequency of prior donation dates, and regular gaps). 
+                   - For each ranked donor, provide their Name, Register Number, Mobile Number, Location, and a detailed "Reliability Assessment" explanation. Explain why they are placed at this rank based on their donation frequency (e.g. "Donated regularly every 4 months, has 3 past successful donations, and is on-campus making them extremely available").
+                
+                3. SECONDARY AVAILABLE MATCH ALTERNATIVES:
+                   Briefly list any other candidates who are eligible and available but did not make the top 3, or highlight if they are universal donors (O-).
+                
+                4. CLINICAL RECOVERY & INELIGIBLE CANDIDATES POOL:
+                   List all candidates who are currently ineligible or unavailable.
+                   - For those on safe recovery interval (last donation was < 90 days ago for males, < 120 days ago for females), state clearly how many days remain until they are eligible.
+                   - For those ineligible due to weight (< 50kg) or underage (< 18), explain the medical safety threshold.
+                   - For those self-reported as unavailable, note their status.
+                
+                5. HOSPITAL MOBILIZATION STRATEGY:
+                   Provide direct, actionable, clinical guidance for the hospital coordinators on how to mobilize these donors (e.g., dial phone numbers, coordinate transport to ${request.hospitalName}).
+                
+                Use professional, clean formatting, bullet points, and high-contrast styling (bold key terms). Keep the tone encouraging, objective, and precise.
             """.trimIndent()
 
             try {
@@ -699,19 +936,29 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
 
     // Backup Local Matching Summary Generative Generator (Aesthetics of AI slop avoided)
     private fun generateMockAiMatching(request: BloodRequest, candidates: List<Donor>): String {
-        val eligible = candidates.filter { checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) }
+        val histories = allHistory.value
+        val historiesByDonor = histories.groupBy { it.donorRegisterNumber }
+
+        val eligible = candidates.filter { checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) && it.availability }
         val sb = StringBuilder()
         sb.append("### 🧠 AI Smart Match Rank & Safety Assessment (Local Engine)\n\n")
         sb.append("Analysis ran for **${request.bloodGroup}** blood group for patient **${request.patientName}** at **${request.hospitalName}**.\n\n")
         
         if (eligible.isEmpty()) {
-            sb.append("⚠️ **Critical Notice:** No directly eligible matching donors are currently available on file. Recommending broadcasting notifications to nearby alumni and auxiliary local health sub-centers.\n")
+            sb.append("⚠️ **Critical Notice:** No directly eligible matching donors are currently available on file. Recommending broadcasting notifications to nearby volunteer networks and auxiliary local health sub-centers.\n")
             return sb.toString()
         }
 
-        sb.append("🏆 **Top Ranked Available Matches:**\n\n")
-        eligible.take(3).forEachIndexed { index, donor ->
+        // Rank by history frequency (historiesByDonor.size desc)
+        val sortedEligible = eligible.sortedWith(
+            compareByDescending<Donor> { (historiesByDonor[it.registerNumber] ?: emptyList()).size }
+                .thenByDescending { it.totalDonations }
+        )
+
+        sb.append("🏆 **Top Ranked Available Matches (Ranked by Reliability & History Frequency):**\n\n")
+        sortedEligible.take(3).forEachIndexed { index, donor ->
             val position = index + 1
+            val donorHistories = historiesByDonor[donor.registerNumber] ?: emptyList()
             val daysAgo = if (donor.lastDonationDate.isNotEmpty()) {
                 try {
                     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -722,16 +969,19 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
                 }
             } else 180
             
-            sb.append("$position. **${donor.name}** (${donor.bloodGroup}) — **Rank Score: ${98 - index * 5}%**\n")
-            sb.append("   - *Status:* Eligible. Last donated $daysAgo days ago (${donor.lastDonationDate.ifEmpty { "No prior record" }}). Weight is ${donor.weight}kg.\n")
+            sb.append("$position. **${donor.name}** (${donor.bloodGroup}) — **Reliability Score: ${98 - index * 5}%**\n")
+            sb.append("   - *Status:* Available & Eligible. Last donated $daysAgo days ago (${donor.lastDonationDate.ifEmpty { "No prior record" }}). Weight is ${donor.weight}kg.\n")
+            sb.append("   - *Frequency:* **${donor.totalDonations} total donations** recorded (with **${donorHistories.size} logged app history records**). Outstanding history of consistent support.\n")
             sb.append("   - *Location:* Located at ${donor.location} (~2 min away). Mobile: ${donor.mobileNumber}\n")
-            sb.append("   - *Match Factor:* Same blood type matching request. Outstanding contact reliability status on historical logs.\n\n")
+            sb.append("   - *Match Factor:* Perfect group compatibility with the request. High-priority candidate for hospital mobilization.\n\n")
         }
 
-        sb.append("⚙️ **Rule-Based Eligibility Breakdown:**\n")
-        candidates.filter { !checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) }.forEach { donor ->
-            sb.append("   - ❌ **${donor.name}** (${donor.bloodGroup}): Ineligible. ")
-            if (donor.weight < 50.0) {
+        sb.append("⚙️ **Rule-Based Eligibility & Unavailable Breakdown:**\n")
+        candidates.filter { !checkIfEligible(it.lastDonationDate, it.weight, it.gender, it.dob) || !it.availability }.forEach { donor ->
+            sb.append("   - ❌ **${donor.name}** (${donor.bloodGroup}): Ineligible / Unavailable. ")
+            if (!donor.availability) {
+                sb.append("Self-reported as currently Unavailable on profile.\n")
+            } else if (donor.weight < 50.0) {
                 sb.append("Weight is ${donor.weight}kg (Under clinical safety minimum 50kg threshold).\n")
             } else {
                 val daysLeft = daysUntilEligible(donor.lastDonationDate, donor.gender)
@@ -808,7 +1058,7 @@ class BloodConnectViewModel(application: Application) : AndroidViewModel(applica
             
             #### 4. 🎯 Administration Action Plan
             1. 📍 **Targeted Drive:** Set up a mobilization booth at *Paavai Golden Jubilee Auditorium* targeting O and AB blood group registry sign-ups.
-            2. 🤝 **Alumni Mobilization:** Contact MCA and MBA alumni chapters located within 15km of Namakkal town to register as backups for semester hiatus.
+            2. 🤝 **Local Staff Mobilization:** Contact nearby faculty and auxiliary staff located within 15km of Namakkal town to register as backups for semester hiatus.
             3. 🏥 **Hospital Sync:** Proactively secure 10 units of rare reserves before college holidays begin.
         """.trimIndent()
     }

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 import com.example.viewmodel.BloodConnectViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +35,9 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var isSignUp by remember { mutableStateOf(false) }
+    var isLoggingIn by remember { mutableStateOf(false) }
 
     // Forms Inputs
     var email by remember { mutableStateOf("") }
@@ -48,8 +51,11 @@ fun LoginScreen(
     var bloodGroup by remember { mutableStateOf("O-") }
     var phone by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("Student Donor") } // "Student Donor", "Volunteer", "Admin"
+    var academicAffiliation by remember { mutableStateOf("Student") } // "Student", "Faculty"
 
     var errorText by remember { mutableStateOf("") }
+    var bloodGroupExpanded by remember { mutableStateOf(false) }
+    val bloodGroupsList = remember { listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-") }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -207,6 +213,85 @@ fun LoginScreen(
 
                             Divider(color = CardBorder, modifier = Modifier.padding(vertical = 4.dp))
 
+                            Text(
+                                text = "Academic Affiliation / Category:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = LightSlate
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                             ) {
+                                listOf("Student", "Faculty").forEach { category ->
+                                    val active = academicAffiliation == category
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (active) DeepMaroon else WarmSlate)
+                                            .border(
+                                                1.dp,
+                                                if (active) DeepMaroon else CardBorder,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { academicAffiliation = category }
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = category,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (active) Color.White else TextDark
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (academicAffiliation == "Student") {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Current Academic Year:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LightSlate
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf("1st Year", "2nd Year", "3rd Year", "4th Year").forEach { currentYear ->
+                                        val active = year == currentYear
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (active) BloodCrimson else WarmSlate)
+                                                .border(
+                                                    1.dp,
+                                                    if (active) BloodCrimson else CardBorder,
+                                                    RoundedCornerShape(6.dp)
+                                                )
+                                                .clickable { year = currentYear }
+                                                .padding(vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = currentYear,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (active) Color.White else TextDark
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             OutlinedTextField(
                                 value = name,
                                 onValueChange = { name = it },
@@ -220,7 +305,14 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = regNo,
                                 onValueChange = { regNo = it },
-                                label = { Text("Register Number / Staff ID") },
+                                label = { 
+                                    Text(
+                                        when (academicAffiliation) {
+                                            "Faculty" -> "Staff / Faculty ID Number"
+                                            else -> "Register Number (Roll No)"
+                                        }
+                                    )
+                                },
                                 leadingIcon = { Icon(Icons.Default.Fingerprint, contentDescription = "", tint = LightSlate) },
                                 modifier = Modifier.fillMaxWidth().testTag("signup_reg_no"),
                                 singleLine = true,
@@ -231,14 +323,47 @@ fun LoginScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                OutlinedTextField(
-                                    value = bloodGroup,
-                                    onValueChange = { bloodGroup = it },
-                                    label = { Text("Blood Group") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = DeepMaroon)
-                                )
+                                Box(modifier = Modifier.weight(1.2f)) {
+                                    OutlinedTextField(
+                                        value = bloodGroup,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("Blood Group") },
+                                        trailingIcon = {
+                                            IconButton(
+                                                onClick = { bloodGroupExpanded = !bloodGroupExpanded },
+                                                modifier = Modifier.testTag("blood_group_dropdown_trigger")
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (bloodGroupExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                                    contentDescription = "Expand blood group",
+                                                    tint = LightSlate
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { bloodGroupExpanded = true }
+                                            .testTag("signup_blood_group"),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = DeepMaroon, focusedLabelColor = DeepMaroon)
+                                    )
+                                    DropdownMenu(
+                                        expanded = bloodGroupExpanded,
+                                        onDismissRequest = { bloodGroupExpanded = false },
+                                        modifier = Modifier.background(Color.White).width(120.dp)
+                                    ) {
+                                        bloodGroupsList.forEach { group ->
+                                            DropdownMenuItem(
+                                                text = { Text(group, color = TextDark, fontWeight = FontWeight.Bold) },
+                                                onClick = {
+                                                    bloodGroup = group
+                                                    bloodGroupExpanded = false
+                                                },
+                                                modifier = Modifier.testTag("blood_group_option_$group")
+                                            )
+                                        }
+                                    }
+                                }
                                 OutlinedTextField(
                                     value = dept,
                                     onValueChange = { dept = it },
@@ -278,6 +403,68 @@ fun LoginScreen(
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = DeepMaroon)
                         )
 
+                        val isEmailNotEmpty = email.trim().isNotEmpty()
+                        val isPaavaiDomain = email.trim().endsWith("@paavai.edu.in", ignoreCase = true)
+                        val isEmailRegexValid = remember(email) {
+                            "^[A-Za-z0-9._%+-]+@paavai\\.edu\\.in$".toRegex(RegexOption.IGNORE_CASE).matches(email.trim())
+                        }
+
+                        if (isEmailNotEmpty) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (isEmailRegexValid) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Valid",
+                                        tint = SuccessGreen,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Verified Paavai Academic Email Domain",
+                                        color = SuccessGreen,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.testTag("email_validation_success")
+                                    )
+                                } else if (isPaavaiDomain) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = "Incomplete",
+                                        tint = LightGold,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Incomplete email prefix (e.g., username@paavai.edu.in)",
+                                        color = LightGold,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.testTag("email_validation_warning")
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Cancel,
+                                        contentDescription = "Invalid",
+                                        tint = BloodCrimson,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Restricted to @paavai.edu.in domain",
+                                        color = BloodCrimson,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.testTag("email_validation_error")
+                                    )
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
@@ -304,10 +491,28 @@ fun LoginScreen(
                                     errorText = "Please enter both Email and Password."
                                     return@Button
                                 }
+                                val trimEmail = email.trim().lowercase()
+                                val paavaiRegex = "^[A-Za-z0-9._%+-]+@paavai\\.edu\\.in$".toRegex(RegexOption.IGNORE_CASE)
+                                if (!paavaiRegex.matches(trimEmail)) {
+                                    errorText = "Invalid email. Access restricted. Please enter a valid @paavai.edu.in academic email."
+                                    return@Button
+                                }
                                 if (isSignUp) {
                                     if (name.trim().isEmpty() || regNo.trim().isEmpty() || phone.trim().isEmpty()) {
                                         errorText = "Information missing. Fill all signup boxes."
                                         return@Button
+                                    }
+                                    if (bloodGroup.trim().uppercase() !in bloodGroupsList) {
+                                        errorText = "Invalid blood group selected. Please select a valid option from the dropdown menu."
+                                        return@Button
+                                    }
+                                    val finalYear = when (academicAffiliation) {
+                                        "Faculty" -> "Faculty"
+                                        else -> year
+                                    }
+                                    val finalUserType = when (academicAffiliation) {
+                                        "Faculty" -> "Faculty"
+                                        else -> "Student"
                                     }
                                     val ok = viewModel.signup(
                                         name = name,
@@ -315,10 +520,11 @@ fun LoginScreen(
                                         pass = password,
                                         regNo = regNo,
                                         dept = dept,
-                                        year = year,
+                                        year = finalYear,
                                         bloodGroup = bloodGroup,
                                         phone = phone,
-                                        role = role
+                                        role = role,
+                                        userType = finalUserType
                                     )
                                     if (ok) {
                                         Toast.makeText(context, "Welcome, $name!", Toast.LENGTH_SHORT).show()
@@ -327,15 +533,21 @@ fun LoginScreen(
                                         errorText = "Account already exists with this Email."
                                     }
                                 } else {
-                                    val ok = viewModel.login(email, password)
-                                    if (ok) {
-                                        Toast.makeText(context, "Sign In Successful!", Toast.LENGTH_SHORT).show()
-                                        onLoginSuccess()
-                                    } else {
-                                        errorText = "Incorrect email address or password combination."
+                                    isLoggingIn = true
+                                    errorText = ""
+                                    coroutineScope.launch {
+                                        val ok = viewModel.loginLive(email, password)
+                                        isLoggingIn = false
+                                        if (ok) {
+                                            Toast.makeText(context, "Sign In Successful!", Toast.LENGTH_SHORT).show()
+                                            onLoginSuccess()
+                                        } else {
+                                            errorText = "Incorrect email address or password combination (Checked Offline & Live Backend)."
+                                        }
                                     }
                                 }
                             },
+                            enabled = !isLoggingIn,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
@@ -343,99 +555,35 @@ fun LoginScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text(
-                                text = if (isSignUp) "CREATE ACCOUNT & JOIN" else "SECURE SIGN IN",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                letterSpacing = 0.5.sp
-                            )
+                            if (isLoggingIn) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "VERIFYING LIVE BACKEND...",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = if (isSignUp) "CREATE ACCOUNT & JOIN" else "SECURE SIGN IN",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // Quick Tester Credentials Sandbox Panel
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkCharcoal.copy(alpha = 0.5f))
-                        .border(1.dp, CardBorder.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "🛠️ DEMO TESTING PRESET CREDENTIALS",
-                        color = PaavaiGold,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        letterSpacing = 0.8.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Tap any role to pre-populate mock college credentials immediately:",
-                        color = LightSlate,
-                        fontSize = 10.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Admin preset
-                        Button(
-                            onClick = {
-                                email = "blood@paavai.com"
-                                password = "blood@123"
-                                isSignUp = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = WarmSlate, contentColor = TextDark),
-                            border = BorderStroke(1.dp, DeepMaroon.copy(alpha = 0.5f)),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text("As Admin", fontSize = 10.sp)
-                        }
-
-                        // Volunteer preset
-                        Button(
-                            onClick = {
-                                email = "volunteer@paavai.edu.in"
-                                password = "vol123"
-                                isSignUp = false
-                            },
-                            modifier = Modifier.weight(1.1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = WarmSlate, contentColor = TextDark),
-                            border = BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f)),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text("As Volunteer", fontSize = 10.sp)
-                        }
-
-                        // Student preset
-                        Button(
-                            onClick = {
-                                email = "student@paavai.edu.in"
-                                password = "stud123"
-                                isSignUp = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = WarmSlate, contentColor = TextDark),
-                            border = BorderStroke(1.dp, InfoBlue.copy(alpha = 0.5f)),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text("As Student", fontSize = 10.sp)
-                        }
-                    }
-                }
-            }
         }
     }
 }

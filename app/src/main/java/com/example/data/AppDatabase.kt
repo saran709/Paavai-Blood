@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
         UserAccountEntity::class,
         DonorNotification::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -66,7 +66,7 @@ abstract class AppDatabase : RoomDatabase() {
                     year = "3rd Year",
                     bloodGroup = "O-",
                     mobileNumber = "+91 9876543210",
-                    email = "saranramesh709@gmail.com",
+                    email = "saranramesh709@paavai.edu.in",
                     location = "Paavai Engineering Campus",
                     weight = 68.5,
                     lastDonationDate = "2026-02-15",
@@ -77,15 +77,15 @@ abstract class AppDatabase : RoomDatabase() {
                 Donor(
                     name = "Ramesh Kumar",
                     registerNumber = "99402511",
-                    department = "MCA (Alumni)",
-                    year = "Alumni",
+                    department = "MCA",
+                    year = "2nd Year",
                     bloodGroup = "A+",
                     mobileNumber = "+91 9443210987",
-                    email = "ramesh.k@paavaialumni.org",
+                    email = "ramesh.k@paavai.edu.in",
                     location = "Namakkal Main Hospital Area",
                     weight = 74.0,
                     lastDonationDate = "2026-04-10",
-                    userType = "Alumni",
+                    userType = "Student",
                     availability = true,
                     totalDonations = 6
                 ),
@@ -111,7 +111,7 @@ abstract class AppDatabase : RoomDatabase() {
                     year = "2nd Year",
                     bloodGroup = "O+",
                     mobileNumber = "+91 8870123123",
-                    email = "arunkarthik@paavai.edu",
+                    email = "arunkarthik@paavai.edu.in",
                     location = "Salem Gate Quarter",
                     weight = 71.0,
                     lastDonationDate = "2026-05-15", // Donated recently! So ineligible for next ~3 months (3 months rule = 90 days, we are currently at may 29, so ineligible!)
@@ -126,7 +126,7 @@ abstract class AppDatabase : RoomDatabase() {
                     year = "4th Year",
                     bloodGroup = "AB+",
                     mobileNumber = "+91 7373112233",
-                    email = "snehars@paavai.edu",
+                    email = "snehars@paavai.edu.in",
                     location = "Paavai Engineering Campus",
                     weight = 52.0,
                     lastDonationDate = "2025-11-20",
@@ -141,7 +141,7 @@ abstract class AppDatabase : RoomDatabase() {
                     year = "1st Year",
                     bloodGroup = "A-",
                     mobileNumber = "+91 9965009988",
-                    email = "vigneshm@paavai.edu",
+                    email = "vigneshm@paavai.edu.in",
                     location = "Rasipuram Terminal",
                     weight = 46.0, // Weighs less than 45 or 50? Usually <50kg is ineligible. Let's show 46kg - weight restriction might make last in line or ineligible depends!
                     lastDonationDate = "2025-08-10",
@@ -263,28 +263,14 @@ abstract class AppDatabase : RoomDatabase() {
 
             initialHistory.forEach { dao.insertHistory(it) }
 
-            // Prepopulate some default user accounts (matching the credentials from ViewModel)
+            // Prepopulate a single default admin user account (matching the credentials from ViewModel)
             val defaultAccounts = listOf(
                 UserAccountEntity(
-                    email = "blood@paavai.com",
+                    email = "admin@paavai.edu.in",
                     password = "blood@123",
                     name = "Administrator",
                     registerNumber = "ADM001",
                     role = "Admin"
-                ),
-                UserAccountEntity(
-                    email = "volunteer@paavai.edu.in",
-                    password = "vol123",
-                    name = "Paavai Volunteer",
-                    registerNumber = "VOL100",
-                    role = "Volunteer"
-                ),
-                UserAccountEntity(
-                    email = "student@paavai.edu.in",
-                    password = "stud123",
-                    name = "Saran Ramesh",
-                    registerNumber = "22104085",
-                    role = "Student Donor"
                 )
             )
 

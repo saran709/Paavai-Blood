@@ -94,133 +94,9 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        // Top Global Active Role Experience Banner (Kills Role Confusion Instantly)
-        item {
-            val bannerColor = when (userRole) {
-                "Admin" -> PaavaiGold
-                "Volunteer" -> SuccessGreen
-                else -> BloodCrimson
-            }
-            val bannerText = when (userRole) {
-                "Admin" -> "🛡️ SYSTEM AUDIT MODE: PRIMARY ADMINISTRATOR"
-                "Volunteer" -> "🟢 COORDINATOR MODE: RED CROSS VOLUNTEER"
-                else -> "🩸 STUDENT PORTAL: CAMPUS DONOR ADVOCATE"
-            }
-            val bannerSubStr = when (userRole) {
-                "Admin" -> "Root catalog configurations, donor registries, and predictive analytics active."
-                "Volunteer" -> "Emergency matchmaking search, SOS broadcasts, and live dispatching."
-                else -> "Clinical eligibility tracker, QR Donor Pass, and reward milestone tier active."
-            }
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-                    .testTag("global_role_badge_banner"),
-                colors = CardDefaults.cardColors(containerColor = DarkCharcoal),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.2.dp, bannerColor.copy(alpha = 0.5f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(bannerColor, CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = bannerText,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = bannerColor,
-                            letterSpacing = 0.5.sp
-                        )
-                        Text(
-                            text = bannerSubStr,
-                            fontSize = 9.sp,
-                            color = LightSlate
-                        )
-                    }
-                }
-            }
-        }
 
-        // Live Emergency Alert banner module
-        if (recentEmergencyAlert != null) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable { showNotificationDialog = true }
-                        .testTag("emergency_alert_floating_banner"),
-                    colors = CardDefaults.cardColors(containerColor = BloodCrimson),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.5.dp, LightGold)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color.White.copy(alpha = 0.2f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Emergency,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "🚨 LIVE EMERGENCY BROADCAST MATCH",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = LightGold,
-                                    letterSpacing = 0.5.sp
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    color = Color.Black.copy(alpha = 0.4f),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = recentEmergencyAlert.bloodGroup,
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Black,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "Emergency demand at ${recentEmergencyAlert.hospitalName} matching your profile!",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Tap here to open Inbox & acknowledge match instantly.",
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.85f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
 
-        // Supabase Cloud Sync Control Module
+        // Supabase Cloud Sync Control Module (Live Cloud Sync Enabled)
         item {
             val syncStatus by viewModel.supabaseSyncStatus.collectAsState()
             val lastSyncTime by viewModel.supabaseLastSyncTime.collectAsState()
@@ -309,7 +185,7 @@ fun DashboardScreen(
                             com.example.data.SupabaseSyncStatus.SUCCESS -> "Clinical database and SOS dispatches are live compiled in your Supabase PostgreSQL cloud."
                             com.example.data.SupabaseSyncStatus.ERROR -> "Cloud sync interrupted: ${syncErrorMessage ?: "Connection refused"}"
                             com.example.data.SupabaseSyncStatus.SYNCING -> "Synchronizing Room SQLite database with Supabase database cluster..."
-                            else -> "Running in offline-first sandbox mode. Configure your Supabase project in AI Studio Secrets panel to enable real-time cloud data sync."
+                            else -> "Running in standard offline-first local mode."
                         },
                         fontSize = 11.sp,
                         color = LightSlate,
@@ -640,52 +516,12 @@ alter table user_accounts disable row level security;""",
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = if(profile != null) "Category: ${profile?.userType} • ${profile?.bloodGroup}" else "Complete your profile below to secure your clinical QR Donor ID",
+                        text = if(profile != null) "Category: ${profile?.userType} • ${profile?.bloodGroup}" else "Complete your profile below to register as a donor.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.9f)
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
 
-                    Divider(color = Color.White.copy(alpha = 0.15f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Reviewer / Sandbox warning
-                    Text(
-                        text = "🛠️ MULTI-ROLE SANDBOX ENVIRONMENT",
-                        color = PaavaiGold,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.8.sp
-                    )
-                    Text(
-                        text = "This app adapts to Students, Volunteers, and Admins dynamically. Simulate another role experience below:",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 9.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val roles = listOf("Student Donor", "Volunteer", "Admin")
-                        roles.forEach { role ->
-                            val isSelected = role == userRole
-                            FilledTonalButton(
-                                onClick = { viewModel.setRole(role) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("role_btn_${role.lowercase().replace(" ", "_")}"),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = if (isSelected) PaavaiGold else Color.White.copy(alpha = 0.15f),
-                                    contentColor = if (isSelected) DarkCharcoal else Color.White
-                                ),
-                                contentPadding = PaddingValues(2.dp)
-                            ) {
-                                Text(role, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -819,19 +655,6 @@ alter table user_accounts disable row level security;""",
                                         )
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                Button(
-                                    onClick = { showQrDialog = true },
-                                    colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson),
-                                    modifier = Modifier.fillMaxWidth().testTag("view_qr_donor_pass_btn"),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(imageVector = Icons.Default.QrCode, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("🤳 SHOW MY QR CAMPUS DONOR PASS")
-                                }
                             } else {
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
@@ -845,7 +668,7 @@ alter table user_accounts disable row level security;""",
                                         color = PaavaiGold
                                     )
                                     Text(
-                                        text = "Complete your quick clinical enrollment to receive points, redeem level badges, and acquire your digital QR Identity Card.",
+                                        text = "Complete your quick clinical enrollment to receive points and redeem level badges.",
                                         fontSize = 11.sp,
                                         color = LightSlate,
                                         textAlign = TextAlign.Center
@@ -1841,169 +1664,6 @@ alter table user_accounts disable row level security;""",
                             colors = ButtonDefaults.buttonColors(containerColor = BloodCrimson)
                         ) {
                             Text("BROADCAST SOS ALERT")
-                        }
-                    }
-                }
-            }
-        }
-
-        if (showQrDialog && profile != null) {
-            Dialog(onDismissRequest = { showQrDialog = false }) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp)
-                        .testTag("qr_pass_dialog"),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.6.dp, PaavaiGold)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .background(DarkCharcoal)
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Institution Header Banner
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "PAAVAI INSTITUTIONS",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = LightSlate,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                text = "CAMPUS DONOR PASS",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = PaavaiGold,
-                                letterSpacing = 0.5.sp
-                            )
-                            Text(
-                                text = "VERIFIED REGISTRY LOG",
-                                fontSize = 9.sp,
-                                color = SuccessGreen,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Divider(color = CardBorder)
-
-                        // Member Identity Card
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(WarmSlate.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Blood Group Indicator
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .background(BloodCrimson, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = profile!!.bloodGroup,
-                                    color = Color.White,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Column {
-                                Text(
-                                    text = profile!!.name.uppercase(),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = TextDark,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = "Roll: ${profile!!.registerNumber}",
-                                    fontSize = 11.sp,
-                                    color = LightSlate
-                                )
-                                Text(
-                                    text = "${profile!!.department}",
-                                    fontSize = 11.sp,
-                                    color = LightSlate
-                                )
-                            }
-                        }
-
-                        // Drawing QR Code on Canvas
-                        Box(
-                            modifier = Modifier
-                                .size(150.dp)
-                                .background(Color.White, RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                val qrSize = size.width
-                                val cellSize = qrSize / 8
-                                
-                                // Background
-                                drawRect(color = Color.White)
-                                
-                                // 1. Top Left Finder Pattern
-                                drawRect(color = Color.Black, topLeft = Offset(0f, 0f), size = Size(cellSize * 2.5f, cellSize * 2.5f))
-                                drawRect(color = Color.White, topLeft = Offset(cellSize * 0.4f, cellSize * 0.4f), size = Size(cellSize * 1.7f, cellSize * 1.7f))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 0.75f, cellSize * 0.75f), size = Size(cellSize * 1.0f, cellSize * 1.0f))
-
-                                // 2. Top Right Finder Pattern
-                                drawRect(color = Color.Black, topLeft = Offset(qrSize - cellSize * 2.5f, 0f), size = Size(cellSize * 2.5f, cellSize * 2.5f))
-                                drawRect(color = Color.White, topLeft = Offset(qrSize - cellSize * 2.1f, cellSize * 0.4f), size = Size(cellSize * 1.7f, cellSize * 1.7f))
-                                drawRect(color = Color.Black, topLeft = Offset(qrSize - cellSize * 1.75f, cellSize * 0.75f), size = Size(cellSize * 1.0f, cellSize * 1.0f))
-
-                                // 3. Bottom Left Finder Pattern
-                                drawRect(color = Color.Black, topLeft = Offset(0f, qrSize - cellSize * 2.5f), size = Size(cellSize * 2.5f, cellSize * 2.5f))
-                                drawRect(color = Color.White, topLeft = Offset(cellSize * 0.4f, qrSize - cellSize * 2.1f), size = Size(cellSize * 1.7f, cellSize * 1.7f))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 0.75f, qrSize - cellSize * 1.75f), size = Size(cellSize * 1.0f, cellSize * 1.0f))
-
-                                // 4. Fake QR random cellular data bits
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 4f, cellSize * 1f), size = Size(cellSize, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 3f, cellSize * 3f), size = Size(cellSize, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 5f, cellSize * 2f), size = Size(cellSize, cellSize * 2f))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 2f, cellSize * 5f), size = Size(cellSize * 2f, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 5f, cellSize * 5f), size = Size(cellSize, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 4f, cellSize * 6f), size = Size(cellSize * 2f, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 6f, cellSize * 4f), size = Size(cellSize, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 1f, cellSize * 4f), size = Size(cellSize, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 7f, cellSize * 6f), size = Size(cellSize, cellSize))
-                                drawRect(color = Color.Black, topLeft = Offset(cellSize * 6f, cellSize * 7f), size = Size(cellSize, cellSize))
-                            }
-                        }
-
-                        Text(
-                            text = "REGISTER_ID: PV-${profile!!.registerNumber}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = LightSlate
-                        )
-
-                        Text(
-                            text = "Scan at any campus donation desk to register your contribution automatically and accrue volunteer points.",
-                            fontSize = 10.sp,
-                            color = LightSlate,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 14.sp
-                        )
-
-                        Button(
-                            onClick = { showQrDialog = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = WarmSlate),
-                            modifier = Modifier.fillMaxWidth().testTag("qr_dialog_close_btn"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Done", color = TextDark)
                         }
                     }
                 }

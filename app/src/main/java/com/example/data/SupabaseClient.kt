@@ -42,8 +42,14 @@ object SupabaseClient {
         .build()
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectionPool(okhttp3.ConnectionPool(32, 5, TimeUnit.MINUTES))
+        .dispatcher(okhttp3.Dispatcher().apply {
+            maxRequests = 128
+            maxRequestsPerHost = 64
+        })
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -366,6 +372,204 @@ object SupabaseClient {
                 }
             }
         }
+    }
+
+    /**
+     * Authenticates a user directly against the remote Supabase database and caches the account.
+     */
+    suspend fun authenticateLive(email: String, word: String, dao: BloodConnectDao): UserAccountEntity? = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            Log.d(TAG, "Supabase not configured, skipping live auth.")
+            return@withContext null
+        }
+        try {
+            val accountAdapter = moshi.adapter<List<UserAccountEntity>>(Types.newParameterizedType(List::class.java, UserAccountEntity::class.java))
+            val encodedEmail = java.net.URLEncoder.encode("eq.${email.trim().lowercase()}", "UTF-8")
+            val url = "$supabaseUrl/rest/v1/user_accounts?email=$encodedEmail&select=*"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("apikey", supabaseKey)
+                .header("Authorization", "Bearer $supabaseKey")
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (!body.isNullOrEmpty()) {
+                        val accounts = accountAdapter.fromJson(body)
+                        val matched = accounts?.firstOrNull()
+                        if (matched != null && matched.password == word) {
+                            dao.insertUserAccount(matched)
+                            Log.d(TAG, "Live authentication successful for user: ${matched.email}")
+                            return@withContext matched
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Live auth request failed with response code: ${response.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Live auth failed with exception: ${e.message}", e)
+        }
+        return@withContext null
+    }
+
+    /**
+     * Registers a user via Supabase Auth REST API (GoTrue /auth/v1/signup).
+     */
+    suspend fun signUpRemote(
+        email: String,
+        word: String,
+        name: String,
+        registerNumber: String,
+        role: String,
+        department: String,
+        year: String,
+        bloodGroup: String,
+        phone: String,
+        userType: String,
+        dao: BloodConnectDao
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            Log.d(TAG, "Supabase not configured, skipping remote sign-up.")
+            return@withContext false
+        }
+        try {
+            val signupUrl = "$supabaseUrl/auth/v1/signup"
+            val metadata = mapOf(
+                "name" to name,
+                "registerNumber" to registerNumber,
+                "role" to role,
+                "department" to department,
+                "year" to year,
+                "bloodGroup" to bloodGroup,
+                "phone" to phone,
+                "userType" to userType
+            )
+            val payload = mapOf(
+                "email" to email.trim().lowercase(),
+                "password" to word,
+                "data" to metadata
+            )
+            val adapter = moshi.adapter<Map<String, Any>>(Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java))
+            val jsonBody = adapter.toJson(payload)
+
+            val request = Request.Builder()
+                .url(signupUrl)
+                .header("apikey", supabaseKey)
+                .header("Content-Type", "application/json")
+                .post(jsonBody.toRequestBody(jsonMediaType))
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    Log.d(TAG, "Supabase Auth GoTrue sign up request was successful.")
+                } else {
+                    Log.w(TAG, "Supabase Auth GoTrue returned error code: ${response.code}")
+                }
+            }
+
+            // Also ensure we cache/insert the user details in our public database table 'user_accounts'
+            val accountObj = UserAccountEntity(
+                email = email.trim().lowercase(),
+                password = word,
+                name = name,
+                registerNumber = registerNumber,
+                role = role,
+                department = department,
+                year = year,
+                bloodGroup = bloodGroup,
+                phone = phone
+            )
+            val accountAdapter = moshi.adapter<UserAccountEntity>(UserAccountEntity::class.java)
+            val jsonAccount = accountAdapter.toJson(accountObj)
+
+            val rowRequest = Request.Builder()
+                .url("$supabaseUrl/rest/v1/user_accounts")
+                .header("apikey", supabaseKey)
+                .header("Authorization", "Bearer $supabaseKey")
+                .header("Content-Type", "application/json")
+                .header("Prefer", "resolution=merge-duplicates")
+                .post(jsonAccount.toRequestBody(jsonMediaType))
+                .build()
+
+            okHttpClient.newCall(rowRequest).execute().use { res ->
+                if (!res.isSuccessful) {
+                    Log.e(TAG, "Failed user_accounts row insertion: ${res.code}")
+                }
+            }
+            return@withContext true
+        } catch (e: Exception) {
+            Log.e(TAG, "Remote sign up failed: ${e.message}", e)
+        }
+        return@withContext false
+    }
+
+    /**
+     * Authenticates a user using Supabase Auth REST API (GoTrue token endpoint).
+     */
+    suspend fun authenticateRemote(
+        email: String,
+        word: String,
+        dao: BloodConnectDao
+    ): UserAccountEntity? = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            Log.d(TAG, "Supabase not configured, bypassing remote authentication.")
+            return@withContext null
+        }
+        try {
+            val loginUrl = "$supabaseUrl/auth/v1/token?grant_type=password"
+            val payload = mapOf(
+                "email" to email.trim().lowercase(),
+                "password" to word
+            )
+            val adapter = moshi.adapter<Map<String, String>>(Types.newParameterizedType(Map::class.java, String::class.java, String::class.java))
+            val jsonBody = adapter.toJson(payload)
+
+            val request = Request.Builder()
+                .url(loginUrl)
+                .header("apikey", supabaseKey)
+                .header("Content-Type", "application/json")
+                .post(jsonBody.toRequestBody(jsonMediaType))
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (!body.isNullOrEmpty()) {
+                        Log.d(TAG, "Supabase token auth succeeded.")
+                        val mapAdapter = moshi.adapter<Map<String, Any>>(Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java))
+                        val sessionData = mapAdapter.fromJson(body)
+                        val userObj = sessionData?.get("user") as? Map<*, *>
+                        val metadata = userObj?.get("user_metadata") as? Map<*, *>
+                        if (metadata != null) {
+                            val account = UserAccountEntity(
+                                email = email.trim().lowercase(),
+                                password = word,
+                                name = metadata["name"]?.toString() ?: "Authenticated User",
+                                registerNumber = metadata["registerNumber"]?.toString() ?: "",
+                                role = metadata["role"]?.toString() ?: "Student Donor",
+                                department = metadata["department"]?.toString() ?: "B.E. Computer Science",
+                                year = metadata["year"]?.toString() ?: "3rd Year",
+                                bloodGroup = metadata["bloodGroup"]?.toString() ?: "O-",
+                                phone = metadata["phone"]?.toString() ?: ""
+                            )
+                            dao.insertUserAccount(account)
+                            return@withContext account
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Supabase Auth login returned code: ${response.code}")
+                }
+            }
+
+            // Remote auth fallback
+            return@withContext authenticateLive(email, word, dao)
+        } catch (e: Exception) {
+            Log.e(TAG, "Remote authenticating error: ${e.message}", e)
+        }
+        return@withContext null
     }
 
     /**

@@ -35,6 +35,12 @@ interface BloodConnectDao {
     @Query("UPDATE blood_requests SET isFulfilled = :fulfilled WHERE id = :requestId")
     suspend fun setRequestFulfilled(requestId: Int, fulfilled: Boolean)
 
+    @Query("UPDATE blood_requests SET status = :status WHERE id = :requestId")
+    suspend fun updateRequestStatus(requestId: Int, status: String)
+
+    @Query("UPDATE blood_requests SET donorRating = :donorRating, platformRating = :platformRating, feedbackComment = :comment WHERE id = :requestId")
+    suspend fun submitRequestFeedback(requestId: Int, donorRating: Int, platformRating: Int, comment: String)
+
     @Query("DELETE FROM blood_requests WHERE id = :requestId")
     suspend fun deleteRequestById(requestId: Int)
 

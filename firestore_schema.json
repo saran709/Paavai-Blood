@@ -1,0 +1,151 @@
+{
+  "${"$"}_schema_version": "1.0.0",
+  "collections": {
+    "donors": {
+      "description": "Stores institutional and volunteer blood donor profiles with clinical metadata",
+      "documentId": "registerNumber (e.g., student/faculty ID) or email to prevent duplicates",
+      "fields": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the donor",
+          "example": "Saran Ramesh"
+        },
+        "registerNumber": {
+          "type": "string",
+          "description": "Institutional registration number/student roll number",
+          "example": "711221104001"
+        },
+        "department": {
+          "type": "string",
+          "description": "Academic department or work unit",
+          "example": "Computer Science & Engineering"
+        },
+        "year": {
+          "type": "string",
+          "description": "Current academic year or employment status",
+          "example": "4th Year"
+        },
+        "blood_group": {
+          "type": "string",
+          "description": "Blood type group. Supported values: A+, A-, B+, B-, AB+, AB-, O+, O-",
+          "example": "O-"
+        },
+        "mobileNumber": {
+          "type": "string",
+          "description": "Verified mobile phone number with optional country code",
+          "example": "+919876543210"
+        },
+        "email": {
+          "type": "string",
+          "description": "Primary electronic email address",
+          "example": "saran@paavai.edu.in"
+        },
+        "location": {
+          "type": "string",
+          "description": "Primary area or campus of residency/availability",
+          "example": "Paavai Engineering College"
+        },
+        "weight": {
+          "type": "number (double)",
+          "description": "Donor weight in kilograms. Mandatory safety check (>= 50kg for clinical safety)",
+          "example": 68.5
+        },
+        "last_donation_date": {
+          "type": "string",
+          "description": "ISO-8601 formatted date of the most recent donation, or empty string if never donated",
+          "example": "2026-04-10"
+        },
+        "userType": {
+          "type": "string",
+          "description": "Sub-classification of the ecosystem user account",
+          "example": "Student"
+        },
+        "availability": {
+          "type": "boolean",
+          "description": "Direct indicator of real-time contact availability status",
+          "example": true
+        },
+        "totalDonations": {
+          "type": "number (integer)",
+          "description": "Lifetime total of completed blood donations",
+          "example": 4
+        },
+        "gender": {
+          "type": "string",
+          "description": "Biological sex. Governs recovery cool-down interval rules (Male: 90 days, Female: 120 days)",
+          "example": "Male"
+        },
+        "dob": {
+          "type": "string",
+          "description": "ISO-8601 date of birth. Governs minimum age threshold (>= 18 years)",
+          "example": "2005-08-15"
+        },
+        "address": {
+          "type": "string",
+          "description": "Current address of the donor",
+          "example": "Namakkal, Tamil Nadu"
+        },
+        "emergencyContact": {
+          "type": "string",
+          "description": "Ecosystem emergency alternate number",
+          "example": "+919988776655"
+        },
+        "profilePhoto": {
+          "type": "string",
+          "description": "URL to profile photo in Firebase Cloud Storage",
+          "example": "https://firebasestorage.googleapis.com/v0/b/paavai-bloodconnect/o/profiles%2F711221104001.jpg"
+        },
+        "updated_at": {
+          "type": "timestamp",
+          "description": "Automatic ServerTimestamp of last change update",
+          "example": "2026-07-17T18:20:00Z"
+        }
+      },
+      "subcollections": {
+        "donation_history": {
+          "description": "Tracks verified historical donations by this donor",
+          "documentId": "auto-generated ID",
+          "fields": {
+            "date": {
+              "type": "string",
+              "description": "Date of donation",
+              "example": "2026-04-10"
+            },
+            "unitsDonated": {
+              "type": "number (integer)",
+              "description": "Units of blood donated",
+              "example": 1
+            },
+            "hospitalName": {
+              "type": "string",
+              "description": "Target healthcare facility of donation",
+              "example": "Paavai Blood Camp"
+            },
+            "verified_at": {
+              "type": "timestamp",
+              "description": "Verification date-time stamp by institutional admin",
+              "example": "2026-04-10T11:30:00Z"
+            }
+          }
+        }
+      }
+    }
+  },
+  "indexes": [
+    {
+      "collectionGroup": "donors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "blood_group",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "availability",
+          "order": "ASCENDING"
+        }
+      ],
+      "description": "Required composite index to perform fast filtering on compatible and currently available donors."
+    }
+  ]
+}
