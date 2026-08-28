@@ -106,33 +106,48 @@ CREATE TABLE IF NOT EXISTS user_accounts (
 );
 
 -- ==========================================
--- 7. SECURITY & ROW LEVEL SECURITY (RLS)
--- To enable easy API access with your public client Key (anon key), 
--- you can temporarily disable RLS, or add standard public permissive policies.
--- ==========================================
+-- Enable RLS on all tables
+ALTER TABLE donors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blood_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE donation_camps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE donation_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_accounts ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE donors DISABLE ROW LEVEL SECURITY;
-ALTER TABLE blood_requests DISABLE ROW LEVEL SECURITY;
-ALTER TABLE donation_camps DISABLE ROW LEVEL SECURITY;
-ALTER TABLE donation_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE user_accounts DISABLE ROW LEVEL SECURITY;
+-- User Accounts: Users can only read all, but update their own
+CREATE POLICY "Enable read access for all users" ON "public"."user_accounts" FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own account" ON "public"."user_accounts" FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can update their own account" ON "public"."user_accounts" 
+  FOR UPDATE USING (email = auth.email()) WITH CHECK (email = auth.email());
 
--- If you prefer keeping RLS enabled on Supabase, select 'Enable RLS' on those tables
--- and execute the following public insert/select/update permissive billing policies:
-/*
-CREATE POLICY "Allow public read access" ON donors FOR SELECT USING (true);
-CREATE POLICY "Allow public insert access" ON donors FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update access" ON donors FOR UPDATE USING (true);
+-- Donors: Donors can read all donors (for finding matches), but only update themselves
+CREATE POLICY "Enable read access for all users" ON "public"."donors" FOR SELECT USING (true);
+CREATE POLICY "Enable insert for all users" ON "public"."donors" FOR INSERT WITH CHECK (true);
+CREATE POLICY "Donors can only update their own profile" ON "public"."donors" 
+  FOR UPDATE USING (
+    (SELECT email FROM user_accounts WHERE "registerNumber" = donors."registerNumber") = auth.email() 
+    OR auth.role() = 'service_role'
+  );
 
-CREATE POLICY "Allow public read access" ON blood_requests FOR SELECT USING (true);
-CREATE POLICY "Allow public insert access" ON blood_requests FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update access" ON blood_requests FOR UPDATE USING (true);
+-- Blood Requests: Anyone can read, Requesters can insert/update their own, Admins can update any
+CREATE POLICY "Enable read access for all users" ON "public"."blood_requests" FOR SELECT USING (true);
+CREATE POLICY "Users can insert requests" ON "public"."blood_requests" FOR INSERT WITH CHECK (true);
+CREATE POLICY "Requesters can update their own requests" ON "public"."blood_requests" 
+  FOR UPDATE USING (
+    "contactNumber" = (SELECT phone FROM user_accounts WHERE email = auth.email()) 
+    OR auth.role() = 'service_role'
+  );
 
+-- Donation Camps: Public read, Admin only write (requires admin role check in user_accounts)
 CREATE POLICY "Allow public read access" ON donation_camps FOR SELECT USING (true);
-CREATE POLICY "Allow public insert access" ON donation_camps FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update access" ON donation_camps FOR UPDATE USING (true);
-
-CREATE POLICY "Allow public read access" ON donation_history FOR SELECT USING (true);
-CREATE POLICY "Allow public insert access" ON donation_history FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update access" ON donation_history FOR UPDATE USING (true);
-*/
+CREATE POLICY "Allow Admin insert access" ON donation_camps FOR INSERT WITH CHECK (
+  (SELECT role FROM user_accounts WHERE email = auth.email()) = 'Admin' OR auth.role() = 'service_role'
+);
+CREATE POLICY "Allow Admin update access" ON donation_camps FOR UPDATE USING (
+  (SELECT role FROM user_accounts WHERE email = auth.email()) = 'Admin' OR auth.role() = 'service_role'
+);
+-- Add Volunteer and Admin update policy for blood_requests
+CREATE POLICY "Volunteers and Admins can update requests" ON "public"."blood_requests"
+  FOR UPDATE USING (
+    (SELECT role FROM user_accounts WHERE email = auth.email()) IN ('Admin', 'Volunteer', 'NSS Volunteer', 'NCC Volunteer', 'YRC Volunteer')
+    OR auth.role() = 'service_role'
+  );

@@ -37,6 +37,8 @@ object SupabaseClient {
     private val _syncErrorMessage = MutableStateFlow<String?>(null)
     val syncErrorMessage: StateFlow<String?> = _syncErrorMessage
 
+    var currentAccessToken: String? = null
+
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
         .build()
@@ -116,7 +118,7 @@ object SupabaseClient {
         val request = Request.Builder()
             .url("$supabaseUrl/rest/v1/donors?select=*")
             .header("apikey", supabaseKey)
-            .header("Authorization", "Bearer $supabaseKey")
+            .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -151,7 +153,7 @@ object SupabaseClient {
             val pushRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/donors")
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .header("Content-Type", "application/json")
                 .header("Prefer", "resolution=merge-duplicates") // upsert based on unique constraint (e.g., registerNumber)
                 .post(postBody)
@@ -172,7 +174,7 @@ object SupabaseClient {
         val request = Request.Builder()
             .url("$supabaseUrl/rest/v1/blood_requests?select=*")
             .header("apikey", supabaseKey)
-            .header("Authorization", "Bearer $supabaseKey")
+            .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -203,7 +205,7 @@ object SupabaseClient {
             val pushRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/blood_requests")
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .header("Content-Type", "application/json")
                 .header("Prefer", "resolution=merge-duplicates")
                 .post(postBody)
@@ -224,7 +226,7 @@ object SupabaseClient {
         val request = Request.Builder()
             .url("$supabaseUrl/rest/v1/donation_camps?select=*")
             .header("apikey", supabaseKey)
-            .header("Authorization", "Bearer $supabaseKey")
+            .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -253,7 +255,7 @@ object SupabaseClient {
             val pushRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/donation_camps")
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .header("Content-Type", "application/json")
                 .header("Prefer", "resolution=merge-duplicates")
                 .post(postBody)
@@ -274,7 +276,7 @@ object SupabaseClient {
         val request = Request.Builder()
             .url("$supabaseUrl/rest/v1/donation_history?select=*")
             .header("apikey", supabaseKey)
-            .header("Authorization", "Bearer $supabaseKey")
+            .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -303,7 +305,7 @@ object SupabaseClient {
             val pushRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/donation_history")
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .header("Content-Type", "application/json")
                 .header("Prefer", "resolution=merge-duplicates")
                 .post(postBody)
@@ -324,7 +326,7 @@ object SupabaseClient {
         val request = Request.Builder()
             .url("$supabaseUrl/rest/v1/user_accounts?select=*")
             .header("apikey", supabaseKey)
-            .header("Authorization", "Bearer $supabaseKey")
+            .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -360,7 +362,7 @@ object SupabaseClient {
             val pushRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/user_accounts")
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .header("Content-Type", "application/json")
                 .header("Prefer", "resolution=merge-duplicates")
                 .post(postBody)
@@ -390,7 +392,7 @@ object SupabaseClient {
             val request = Request.Builder()
                 .url(url)
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .build()
 
             okHttpClient.newCall(request).execute().use { response ->
@@ -488,7 +490,7 @@ object SupabaseClient {
             val rowRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/user_accounts")
                 .header("apikey", supabaseKey)
-                .header("Authorization", "Bearer $supabaseKey")
+                .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
                 .header("Content-Type", "application/json")
                 .header("Prefer", "resolution=merge-duplicates")
                 .post(jsonAccount.toRequestBody(jsonMediaType))
@@ -541,6 +543,11 @@ object SupabaseClient {
                         Log.d(TAG, "Supabase token auth succeeded.")
                         val mapAdapter = moshi.adapter<Map<String, Any>>(Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java))
                         val sessionData = mapAdapter.fromJson(body)
+                        val accessToken = sessionData?.get("access_token") as? String
+                        if (accessToken != null) {
+                            currentAccessToken = accessToken
+                            Log.d(TAG, "Successfully acquired and stored JWT access_token")
+                        }
                         val userObj = sessionData?.get("user") as? Map<*, *>
                         val metadata = userObj?.get("user_metadata") as? Map<*, *>
                         if (metadata != null) {
@@ -599,7 +606,7 @@ object SupabaseClient {
         val request = Request.Builder()
             .url(url)
             .header("apikey", supabaseKey)
-            .header("Authorization", "Bearer $supabaseKey")
+            .header("Authorization", "Bearer ${currentAccessToken ?: supabaseKey}")
             .build()
 
         try {

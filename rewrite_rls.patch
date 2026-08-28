@@ -1,0 +1,43 @@
+--- supabase_schema.sql
++++ supabase_schema.sql
+@@ -107,17 +107,35 @@
+ 
+ -- ==========================================
+ -- 7. SECURITY & ROW LEVEL SECURITY (RLS)
+--- To enable easy API access with your public client Key (anon key), 
+--- you can temporarily disable RLS, or add standard public permissive policies.
+ -- ==========================================
+ 
+---ALTER TABLE user_accounts DISABLE ROW LEVEL SECURITY;
+-
+--- If you prefer keeping RLS enabled on Supabase, select 'Enable RLS' on those tables
+--- and execute the following public insert/select/update permissive billing policies:
+-/*
+-CREATE POLICY "Enable read access for all users" ON "public"."user_accounts" FOR SELECT USING (true);
+-CREATE POLICY "Enable insert for all users" ON "public"."user_accounts" FOR INSERT WITH CHECK (true);
+-CREATE POLICY "Enable update for all users" ON "public"."user_accounts" FOR UPDATE USING (true) WITH CHECK (true);
+-*/
++ALTER TABLE donors ENABLE ROW LEVEL SECURITY;
++ALTER TABLE user_accounts ENABLE ROW LEVEL SECURITY;
++ALTER TABLE blood_requests ENABLE ROW LEVEL SECURITY;
++
++-- Donors can read all donors (for finding matches), but only update themselves
++CREATE POLICY "Enable read access for all users" ON "public"."donors" FOR SELECT USING (true);
++CREATE POLICY "Enable insert for all users" ON "public"."donors" FOR INSERT WITH CHECK (true);
++CREATE POLICY "Donors can only update their own profile" ON "public"."donors" 
++  FOR UPDATE USING (auth.uid()::text = registerNumber OR auth.role() = 'service_role') WITH CHECK (auth.uid()::text = registerNumber OR auth.role() = 'service_role');
++
++-- User accounts (for simple role checks)
++CREATE POLICY "Enable read access for all users" ON "public"."user_accounts" FOR SELECT USING (true);
++CREATE POLICY "Users can insert their own account" ON "public"."user_accounts" FOR INSERT WITH CHECK (true);
++CREATE POLICY "Users can update their own account" ON "public"."user_accounts" 
++  FOR UPDATE USING (email = auth.email()) WITH CHECK (email = auth.email());
++
++-- Blood Requests: Anyone can read, Requesters can insert/update their own, Admins can update any
++CREATE POLICY "Enable read access for all users" ON "public"."blood_requests" FOR SELECT USING (true);
++CREATE POLICY "Users can insert requests" ON "public"."blood_requests" FOR INSERT WITH CHECK (true);
++CREATE POLICY "Requesters can update their own requests" ON "public"."blood_requests" 
++  FOR UPDATE USING (
++    auth.uid()::text = requesterId OR 
++    auth.role() = 'service_role'
++  );

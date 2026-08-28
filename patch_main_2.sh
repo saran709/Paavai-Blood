@@ -1,0 +1,1 @@
+sed -i 's/androidx.compose.material3.Text("CRASH/androidx.compose.material3.Text(text = "CRASH: " + e.javaClass.simpleName + ": " + e.message, color = androidx.compose.ui.graphics.Color.Red/g' app/src/main/java/com/example/MainActivity.kt

@@ -1,0 +1,1 @@
+sed -i 's/val syncErrorMessage: StateFlow<String?> = _syncErrorMessage/val syncErrorMessage: StateFlow<String?> = _syncErrorMessage\n\n    var currentAccessToken: String? = null/g' app/src/main/java/com/example/data/SupabaseClient.kt

@@ -33,6 +33,14 @@ import androidx.compose.ui.text.font.FontWeight
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            android.util.Log.e("CrashReport", "Uncaught exception", e)
+            runOnUiThread {
+                setContent {
+                    androidx.compose.material3.Text(text = "CRASH: ${e.javaClass.simpleName}: ${e.message}", color = androidx.compose.ui.graphics.Color.Red, modifier = androidx.compose.ui.Modifier.padding(32.dp))
+                }
+            }
+        }
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -72,9 +80,15 @@ class MainActivity : ComponentActivity() {
                                     NavigationBarItemData("home", "Home", Icons.Default.Dashboard, "Home Navigation"),
                                     NavigationBarItemData("finder", "Find Donors", Icons.Default.Search, "Finder Navigation"),
                                     NavigationBarItemData("requests", "Requests", Icons.Default.Bloodtype, "Requests Navigation"),
-                                    NavigationBarItemData("profile", "Profile", Icons.Default.AccountCircle, "Profile Navigation"),
-                                    NavigationBarItemData("rewards", "Rewards", Icons.Default.EmojiEvents, "Rewards Navigation")
+                                    NavigationBarItemData("profile", "Profile", Icons.Default.AccountCircle, "Profile Navigation")
                                 )
+
+                                // Exclude Rewards section for Admin role in the system controls
+                                if (userRole != "Admin") {
+                                    navItems.add(
+                                        NavigationBarItemData("rewards", "Rewards", Icons.Default.EmojiEvents, "Rewards Navigation")
+                                    )
+                                }
 
                                 // Conditional Admin Panel constraint: ONLY show if user has "Admin" role
                                 if (userRole == "Admin") {
@@ -162,10 +176,23 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("rewards") {
-                            RewardsScreen(
-                                viewModel = viewModel,
-                                onNavigateToRegister = { navController.navigate("profile") }
-                            )
+                            if (userRole != "Admin") {
+                                RewardsScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToRegister = { navController.navigate("profile") }
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize().background(WarmSlate),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Rewards section is disabled for Administrators",
+                                        color = BloodCrimson,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                         composable("admin") {
                             // Defensive protection: if non-admin tries to navigate directly
